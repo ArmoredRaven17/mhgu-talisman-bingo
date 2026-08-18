@@ -503,12 +503,22 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 .draw-log{
   flex:1;min-height:64px;max-height:104px;overflow-y:auto;
   display:flex;flex-direction:column;gap:2px;font-size:11.5px;line-height:1.35;
+  /* The log scrolls, so its overlay scrollbar sat on top of the right-hand end of each row —
+     which is exactly where "N to mark" lives. scrollbar-gutter reserves the track even when
+     the log is short enough not to scroll, so rows don't shift as entries accumulate; the
+     padding covers engines that ignore it. */
+  scrollbar-gutter:stable;
+  padding-right:10px;
 }
 .log-row{display:flex;gap:6px;align-items:baseline;opacity:.62}
 .log-row.hit{opacity:1;color:var(--win)}
 .log-n{flex-shrink:0;opacity:.6;min-width:34px}
 .log-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .log-hit{flex-shrink:0;font-weight:700}
+/* Monospaced so the glyphs line up into a column down the log, which is what makes them
+   scannable at a glance rather than three more characters to read. */
+.log-slots{flex-shrink:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.08em;opacity:.75}
 
 @media (max-width:760px){
   .drawbar{grid-template-columns:1fr}

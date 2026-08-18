@@ -113,6 +113,9 @@
 
   const MAX_CELL_TEXT = 40;
 
+  // Slots drawn the way the game shows them: a hole per slot, filled or empty.
+  const SLOT_GLYPH = ["---", "O--", "OO-", "OOO"];
+
   // ── Goal presentation ──────────────────────────────────────────────────────
   const treeName = ROLL.treeName;
   const charmName = ROLL.charmName;
@@ -632,9 +635,16 @@
       n.textContent = "#" + entry.at;
       const t = document.createElement("span");
       t.className = "log-text";
-      t.textContent = charmName(entry.charm.r) + " · " + (entry.charm.s || 0) + "s · "
+      t.textContent = charmName(entry.charm.r) + " · "
         + entry.charm.k.map((s) => treeName(s[0]) + " " + (s[1] > 0 ? "+" : "") + s[1]).join(", ");
-      row.appendChild(n); row.appendChild(t);
+      // Slots as filled/empty holes rather than a count, and in their own span rather than
+      // appended to the text: .log-text ellipsises when a two-skill charm is long, which
+      // would eat the slots exactly on the charms most worth reading.
+      const sl = document.createElement("span");
+      sl.className = "log-slots";
+      sl.textContent = SLOT_GLYPH[entry.charm.s | 0] || SLOT_GLYPH[0];
+      sl.title = (entry.charm.s | 0) + ((entry.charm.s | 0) === 1 ? " slot" : " slots");
+      row.appendChild(n); row.appendChild(t); row.appendChild(sl);
       // Was "+N", from when a draw added N marks by itself. It never meant a bonus or a
       // score — it is how many squares on THIS card the charm satisfies — and now that
       // marking is manual it is a to-do count, so it says so rather than implying the app
