@@ -167,6 +167,16 @@ the draw count read at that moment. Still frozen once set, so a later unmark can
 already happened.
 
 **A square can't be claimed until a draw has satisfied it** (`lockUnmatched`, on by default).
+
+This is the one integrity check the app is actually able to make, and it is worth being clear about
+why it exists here and not in MHGU Bingo. That app's squares are hunt objectives — only the player
+knows whether they carved the tail, so it has no ground truth and manual marking is the only option.
+Here every square is a condition on a talisman and **the roller produced the talisman**, so the draw
+history is an authoritative record in exactly the way a traditional caller's board is. Marking a
+square nothing was called for is a mistake the app can see, so it stops it.
+
+It is a guard rail rather than a lock: the setting turns off, and anyone who wants to cheat still
+can. The point is that nobody drifts into it by accident.
 `card.eligible` is the set of squares any draw has ever matched; it only grows, and `toggleMark`
 refuses to mark anything outside it. Unmarking is always allowed — that is how a misclick is undone.
 
