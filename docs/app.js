@@ -234,7 +234,18 @@
   let usedKeys = new Set();
   let showReroll = true;
   let softHighlight = true;
-  let lockUnmatched = true;
+  // HIDDEN, and forced off. The mechanism below works and is left intact, but the control is
+  // not offered yet because it only holds up for the person pressing Draw.
+  //
+  // In a real game one person calls and everyone else just watches their own card. Those other
+  // devices never draw, so their `eligible` set stays empty and EVERY square locks forever —
+  // the check breaks precisely for the players it was meant to keep honest. Re-enabling it
+  // needs the draw to reach the other screens first.
+  //
+  // Read as a literal rather than from settings on purpose: anyone who ticked the box while it
+  // was live has `lockUnmatched: true` in localStorage, and honouring that with no control on
+  // the page would strand them with an uncompletable card.
+  let lockUnmatched = false;
 
   const TIER_PAIRS = TIERS.map((t) => [t, TIER_W[t]]);
 
@@ -986,7 +997,7 @@
   // ── Persistence ────────────────────────────────────────────────────────────
   function saveSettings() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, showReroll: showReroll, softHighlight: softHighlight, lockUnmatched: lockUnmatched, previewMin: previewMin }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, showReroll: showReroll, softHighlight: softHighlight, previewMin: previewMin }));
     } catch (e) {}
   }
   function saveCard() {
@@ -1004,8 +1015,6 @@
     $("showReroll").checked = showReroll;
     softHighlight = d.softHighlight !== false;
     $("softHighlight").checked = softHighlight;
-    lockUnmatched = d.lockUnmatched !== false;
-    $("lockUnmatched").checked = lockUnmatched;
     if (Number.isInteger(d.previewMin)) previewMin = d.previewMin;
     $("previewMin").value = String(previewMin);
     if (d.cfg && typeof d.cfg === "object") {
@@ -1065,11 +1074,9 @@
     cfg = JSON.parse(JSON.stringify(DEFAULT_CFG));
     showReroll = true;
     softHighlight = true;
-    lockUnmatched = true;
     previewMin = 5;
     $("showReroll").checked = true;
     $("softHighlight").checked = true;
-    $("lockUnmatched").checked = true;
     $("previewMin").value = "5";
     $("gridSize").value = String(cfg.size);
     $("freeSpace").checked = cfg.free;
@@ -1140,9 +1147,6 @@
     });
     $("softHighlight").addEventListener("change", () => {
       softHighlight = $("softHighlight").checked; saveSettings(); if (card) renderCard();
-    });
-    $("lockUnmatched").addEventListener("change", () => {
-      lockUnmatched = $("lockUnmatched").checked; saveSettings(); if (card) renderCard();
     });
     $("previewMin").addEventListener("change", () => {
       previewMin = parseInt($("previewMin").value, 10); saveSettings(); hidePreview();

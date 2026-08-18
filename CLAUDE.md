@@ -166,28 +166,27 @@ The draw count is now the **caller's clock** rather than an objective score: `fi
 the draw count read at that moment. Still frozen once set, so a later unmark can't move a score that
 already happened.
 
-**A square can't be claimed until a draw has satisfied it** (`lockUnmatched`, on by default).
+**Marking is NOT gated on the draw history, and the half-built gate is switched off.** The code is
+still there (`card.eligible`, `lockUnmatched`, the `.locked` class) and it works, but the control is
+hidden and the flag is a hard-coded `false`.
 
-This is the one integrity check the app is actually able to make, and it is worth being clear about
-why it exists here and not in MHGU Bingo. That app's squares are hunt objectives — only the player
-knows whether they carved the tail, so it has no ground truth and manual marking is the only option.
-Here every square is a condition on a talisman and **the roller produced the talisman**, so the draw
-history is an authoritative record in exactly the way a traditional caller's board is. Marking a
-square nothing was called for is a mistake the app can see, so it stops it.
+It was written to keep people honest, and the idea is sound in a way it could not be in MHGU Bingo:
+that app's squares are hunt objectives only the player can adjudicate, whereas here every square is
+a condition on a talisman and **the roller produced the talisman**, so the draw history is an
+authoritative record exactly like a traditional caller's board.
 
-It is a guard rail rather than a lock: the setting turns off, and anyone who wants to cheat still
-can. The point is that nobody drifts into it by accident.
-`card.eligible` is the set of squares any draw has ever matched; it only grows, and `toggleMark`
-refuses to mark anything outside it. Unmarking is always allowed — that is how a misclick is undone.
+What it does not survive is the actual table. **One person calls; everyone else only watches their
+own card.** Those other devices never draw, so their `eligible` set stays empty and every square
+locks forever — the check fails hardest for precisely the players it was meant to keep honest. It
+cannot come back until a draw can reach the other screens.
 
-`eligible` is tracked separately rather than derived from `card.log`, which keeps only the last 50
-draws for display: a square matched on draw 3 would otherwise become unmarkable by draw 60. A reroll
-drops its index from the set, because the new goal has never been drawn for whatever the old one
-earned.
+`lockUnmatched` is read as a literal rather than from settings on purpose: anyone who ticked the box
+while it was briefly live has `lockUnmatched: true` in localStorage, and honouring that with no
+control on the page would strand them with an uncompletable card. The key is no longer written, so
+it clears itself on the next settings save.
 
-Locked squares get no dimming and no badge, only a default cursor. Marking out what is still
-outstanding would hand the player the exact inverse of the hint for free, including when the
-highlight is switched off.
+`card.eligible` is still tracked on every draw. It costs nothing and means the data is already there
+if the gate returns.
 
 There is no auto-draw. Draws are one at a time, because a person is reading them out.
 
