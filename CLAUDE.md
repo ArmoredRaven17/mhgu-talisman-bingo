@@ -166,6 +166,19 @@ The draw count is now the **caller's clock** rather than an objective score: `fi
 the draw count read at that moment. Still frozen once set, so a later unmark can't move a score that
 already happened.
 
+**A square can't be claimed until a draw has satisfied it** (`lockUnmatched`, on by default).
+`card.eligible` is the set of squares any draw has ever matched; it only grows, and `toggleMark`
+refuses to mark anything outside it. Unmarking is always allowed — that is how a misclick is undone.
+
+`eligible` is tracked separately rather than derived from `card.log`, which keeps only the last 50
+draws for display: a square matched on draw 3 would otherwise become unmarkable by draw 60. A reroll
+drops its index from the set, because the new goal has never been drawn for whatever the old one
+earned.
+
+Locked squares get no dimming and no badge, only a default cursor. Marking out what is still
+outstanding would hand the player the exact inverse of the hint for free, including when the
+highlight is switched off.
+
 There is no auto-draw. Draws are one at a time, because a person is reading them out.
 
 ## Pacing

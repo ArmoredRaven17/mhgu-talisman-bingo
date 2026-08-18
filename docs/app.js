@@ -234,6 +234,7 @@
   let usedKeys = new Set();
   let showReroll = true;
   let softHighlight = true;
+  let lockUnmatched = true;
 
   const TIER_PAIRS = TIERS.map((t) => [t, TIER_W[t]]);
 
@@ -314,7 +315,7 @@
       seed: body + "-" + fp, token: token, fp: fp, keep: keep,
       cfg: JSON.parse(JSON.stringify(cfg)),
       modified: false, freeIdx: built.freeIdx, cells: built.cells,
-      marked: new Set(built.freeIdx >= 0 ? [built.freeIdx] : []),
+      marked: new Set(built.freeIdx >= 0 ? [built.freeIdx] : []), eligible: [],
       created: Date.now(), need: built.need, short: built.need - built.filled,
       draws: 0, firstBingoDraw: null, blackoutDraw: null, log: [], last: null,
     };
@@ -342,8 +343,10 @@
     usedKeys.add(next.k);
     card.cells[i] = toCell(next);
     card.marked.delete(i);
-    // A fresh square must not inherit the previous one's glow.
+    // A fresh square must not inherit the previous one's glow, nor its claim: the new goal
+    // has never been drawn for, whatever the old one had earned.
     if (card.hint) card.hint = card.hint.filter((x) => x !== i);
+    if (card.eligible) card.eligible = card.eligible.filter((x) => x !== i);
     card.modified = true;
     renderCard();
     saveCard();
@@ -369,13 +372,22 @@
     if (!card || isComplete()) return null;
     const charm = (view || ROLL.table(card.keep)).draw(TIER_PAIRS);
     if (!charm) return null;
-    const hint = [];
+    // Two sets, and the difference matters. `hint` is what to go click NOW, so it skips
+    // squares already marked. `eligible` is every square ANY draw has ever satisfied, and it
+    // only grows — it is what makes a square markable at all.
+    //
+    // It cannot be derived from card.log: that keeps the last 50 draws for display, so a
+    // square matched on draw 3 would quietly become unmarkable by draw 60.
+    const hint = [], eligible = new Set(card.eligible || []);
     for (let i = 0; i < card.cells.length; i++) {
       const cell = card.cells[i];
-      if (card.marked.has(i) || !cell.cond) continue;
-      if (satisfies(charm, cell.cond)) hint.push(i);
+      if (!cell.cond) continue;
+      if (!satisfies(charm, cell.cond)) continue;
+      eligible.add(i);
+      if (!card.marked.has(i)) hint.push(i);
     }
     card.draws++;
+    card.eligible = [...eligible];
     card.hint = hint;
     card.last = { charm: charm, hits: hint.length };
     card.log.unshift({ charm: charm, hits: hint.length, at: card.draws });
@@ -386,10 +398,20 @@
   // Marking is the player's call, so the milestones are stamped when THEY complete a line or
   // the board — against the caller's draw count at that moment. Frozen once set: a later
   // unmark must not be able to move a score that already happened.
+  // With the setting off, every square is claimable and the draw history is advisory only —
+  // which is the honest way to play if someone is calling from the physical game rather than
+  // from this app's roller.
+  const isEligible = (i) =>
+    !lockUnmatched || (!!card && (card.eligible || []).indexOf(i) > -1);
+
   function toggleMark(i) {
     if (!card || i === card.freeIdx) return;
     const cell = card.cells[i];
     if (!cell || !cell.cond) return;
+    // Unmarking is always allowed — that is how you undo a misclick. Marking is not: a
+    // square only becomes claimable once some draw has actually satisfied it, which is what
+    // the draw history is for.
+    if (!card.marked.has(i) && !isEligible(i)) return;
     if (card.marked.has(i)) card.marked.delete(i);
     else {
       card.marked.add(i);
@@ -446,15 +468,23 @@
       // marks their own card. A div rather than a <button> because the reroll control nests
       // inside it, and a button inside a button is invalid — hence the explicit role, tab
       // stop and key handling.
+      const claimable = cell.cond && (card.marked.has(i) || isEligible(i));
       if (cell.cond) {
-        el.setAttribute("role", "button");
-        el.setAttribute("tabindex", "0");
-        el.setAttribute("aria-pressed", card.marked.has(i) ? "true" : "false");
-        el.setAttribute("aria-label", cell.text + (card.marked.has(i) ? ", marked" : ""));
-        el.addEventListener("click", () => toggleMark(i));
-        el.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleMark(i); }
-        });
+        if (claimable) {
+          el.setAttribute("role", "button");
+          el.setAttribute("tabindex", "0");
+          el.setAttribute("aria-pressed", card.marked.has(i) ? "true" : "false");
+          el.setAttribute("aria-label", cell.text + (card.marked.has(i) ? ", marked" : ""));
+          el.addEventListener("click", () => toggleMark(i));
+          el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleMark(i); }
+          });
+        } else {
+          // Not yet drawn for. Left out of the tab order rather than given aria-disabled,
+          // because a control you cannot use is noise to step through.
+          el.classList.add("locked");
+          el.setAttribute("aria-label", cell.text + ", not yet drawn");
+        }
       }
       if (cell.cat !== "free" && cell.cat !== "empty" && showReroll) {
         const rr = document.createElement("button");
@@ -956,7 +986,7 @@
   // ── Persistence ────────────────────────────────────────────────────────────
   function saveSettings() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, showReroll: showReroll, softHighlight: softHighlight, previewMin: previewMin }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, showReroll: showReroll, softHighlight: softHighlight, lockUnmatched: lockUnmatched, previewMin: previewMin }));
     } catch (e) {}
   }
   function saveCard() {
@@ -974,6 +1004,8 @@
     $("showReroll").checked = showReroll;
     softHighlight = d.softHighlight !== false;
     $("softHighlight").checked = softHighlight;
+    lockUnmatched = d.lockUnmatched !== false;
+    $("lockUnmatched").checked = lockUnmatched;
     if (Number.isInteger(d.previewMin)) previewMin = d.previewMin;
     $("previewMin").value = String(previewMin);
     if (d.cfg && typeof d.cfg === "object") {
@@ -997,6 +1029,11 @@
     if (!Array.isArray(d.keep) || !d.keep.length) return false;
     card = d;
     card.marked = new Set(Array.isArray(d.marked) ? d.marked : []);
+    // Cards saved before marking was gated carry no eligible list. Seed it from what is
+    // already marked (plus any live hint) so an in-flight game doesn't start rejecting its
+    // own squares; anything else re-earns eligibility on the next matching draw.
+    card.eligible = Array.isArray(d.eligible) ? d.eligible
+      : [...new Set([...(d.marked || []), ...(d.hint || [])])];
     card.need = d.need | 0;
     card.short = d.short | 0;
     card.draws = d.draws | 0;
@@ -1028,9 +1065,11 @@
     cfg = JSON.parse(JSON.stringify(DEFAULT_CFG));
     showReroll = true;
     softHighlight = true;
+    lockUnmatched = true;
     previewMin = 5;
     $("showReroll").checked = true;
     $("softHighlight").checked = true;
+    $("lockUnmatched").checked = true;
     $("previewMin").value = "5";
     $("gridSize").value = String(cfg.size);
     $("freeSpace").checked = cfg.free;
@@ -1101,6 +1140,9 @@
     });
     $("softHighlight").addEventListener("change", () => {
       softHighlight = $("softHighlight").checked; saveSettings(); if (card) renderCard();
+    });
+    $("lockUnmatched").addEventListener("change", () => {
+      lockUnmatched = $("lockUnmatched").checked; saveSettings(); if (card) renderCard();
     });
     $("previewMin").addEventListener("change", () => {
       previewMin = parseInt($("previewMin").value, 10); saveSettings(); hidePreview();
