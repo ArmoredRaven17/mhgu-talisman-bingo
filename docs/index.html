@@ -76,17 +76,6 @@
         </div>
       </section>
 
-      <section class="panel" data-open="false">
-        <button class="panel-head">Roll Tiers <span class="chev">&#9662;</span></button>
-        <div class="panel-body">
-          <p class="hint">Which charm tables the draws come from. Higher weight, more often
-             drawn &mdash; set one to 0 to shut it out entirely.</p>
-          <div id="tierList"></div>
-          <p class="hint">Mystery talismans never carry a second skill and never reach two
-             slots, so leaning on them shrinks what a card can ask for. The goal counts
-             above follow whatever you set here.</p>
-        </div>
-      </section>
 
       <button id="resetBtn" class="btn block">Reset</button>
     </aside>
@@ -145,13 +134,10 @@
           three-slotter.</li>
     </ul>
 
-    <h3>The odds under each square</h3>
-    <p>The small line on a square is the chance that any one draw satisfies it, at your
-       current tier weights. It is the honest difficulty rating &mdash; when a card stalls,
-       that number tells you which square is holding it up.</p>
-    <p>Squares are filtered so a card stays winnable: nothing under about 1 in 1,000 is ever
-       used, and only a small budget of squares per card is allowed to be harder than about
-       1 in 300. On a 5&times;5 that budget is one square.</p>
+    <h3>Fairness</h3>
+    <p>Squares are filtered so a card stays winnable. Nothing hopeless is ever put on a
+       board, and only a small budget of squares per card &mdash; one on a 5&times;5 &mdash;
+       is allowed to be a real grind.</p>
 
     <h3>Colours</h3>
     <p>A square's outline tells you which pool it came from.</p>
@@ -160,15 +146,11 @@
        draws a cross through it. A completed line overrides all of that and fills the squares
        solid, in a colour picked to contrast with whatever theme you're using.</p>
 
-    <h3>Roll Tiers</h3>
-    <p>Charms come off four tables. Mystery rolls the junk (Pawn and Bishop talismans),
-       enduring rolls the good stuff (Hero, Legend, Creator). The weights decide how often
-       each is drawn.</p>
-    <p>They are a real difficulty lever, but not the one you'd expect: they mostly decide
-       <em>which squares can exist</em> rather than how long a card takes. A mystery talisman
-       never carries a second skill and never reaches two slots, so a mystery-heavy mix
-       leaves far fewer conditions reachable &mdash; and the app simply stops offering the
-       ones it can't produce.</p>
+    <h3>What you draw</h3>
+    <p>Charms come off the game's four tables. Mystery rolls the junk (Pawn and Bishop
+       talismans), enduring rolls the good stuff (Hero, Legend, Creator), and the mix is
+       junk-heavy &mdash; the shape of a real charm run. Most of what you pull is rubbish.
+       That's the point.</p>
 
     <h3>Seeds</h3>
     <p>Every card has a seed like <code>MHGU-5F-N4P3S1R2C3-K7T2NX-9C4A</code>, shown in the
@@ -177,8 +159,8 @@
        twenty-five squares and completely different luck &mdash; which is the point, because
        the marking is automatic and a shared draw stream would give everyone an identical
        game with exactly one possible score.</p>
-    <p>The seed carries your grid size and pool weights but not your tier weights. If they
-       differ from the ones the card was made with, a banner says so.</p>
+    <p>The seed carries your grid size and pool weights, which is everything that decides
+       the squares.</p>
 
     <h3>Rerolling</h3>
     <p>Hover a square and hit <strong>&#8635;</strong> to swap just that condition. Once you
@@ -267,8 +249,8 @@
 
 <div id="tilePreview" class="tile-preview"></div>
 
-<script src="data.js?v=1"></script>
+<script src="data.js?v=2"></script>
 <script src="roll.js?v=1"></script>
-<script src="app.js?v=1"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

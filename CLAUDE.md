@@ -103,11 +103,27 @@ can never ask for it reads as a bug. One hard square costs about 100 draws on a 
 - **Deviant trees 144–179 are excluded by name.** All 36 are below the floor anyway, but the real
   reason is that "Has Bloodbath X" is not a readable bingo tile. Trees 180–205 never appear in any
   table at all.
-- **Never emit skill × skill combos.** Two *named* skills on one charm runs about 1 in 13,000 at its
-  most generous and a median of 1 in 51,000 — all 8,128 such tiles are unwinnable. Slots and rarity
-  are the only second conditions cheap enough to pair with a named skill. Per-tree *negative* tiles
-  fail for the same reason; the generic ones ("a cursed charm", 1 in 7) are cheap because any tree
-  will do, and they're the only tiles that make a junk charm feel like a hit.
+- **Never emit skill × skill combos.** Two *named* skills on one charm is 1 in 16,065 at its most
+  generous (Furor + Charmer) and a median of 1 in 49,161, so all 7,047 producible pairs are
+  unwinnable — not one clears `HARD_FLOOR`, and nothing appears at all until a floor of about
+  1 in 20,000. Mystery is 30% of draws and has **zero** legal slot-2 rows, so nearly a third of the
+  stream cannot make a two-skill charm at all. This was tried and reverted; don't re-add it.
+- **What does express "one skill and another": name one tree and ask only that the second skill be
+  positive** (`{a, n: 2, pos: 1}`, the `cq:` pool). That pays the 50% gate once instead of also
+  paying a 1-in-74..105 second pick, which lands it at 1 in 213 at best — 408 tiles, 26 above the
+  soft floor and 227 in the hard band. Its probability is a **joint, not a product**: both
+  conditions live in the same two slots, so `pWithPosSecond` sums the two placements of the named
+  tree rather than multiplying `pHas` by `pSecond`. Slots, rarity and a positive second skill are
+  the only second conditions cheap enough to pair with a named skill. Per-tree *negative* tiles
+  fail like skill × skill does; the generic ones ("a cursed charm", 1 in 7) are cheap because any
+  tree will do, and they're the only tiles that make a junk charm feel like a hit.
+
+## Odds are never shown to the player
+
+Every goal carries an exact probability and the floors depend on it, but it is internal. An earlier
+version printed it under each tile as a difficulty pip; it reads as a spoiler, and knowing a square is
+hopeless before you start turns the card into a spreadsheet. Not knowing is the appeal. Don't put it
+back on the tile — the Help modal says only that cards are filtered to stay winnable.
 
 ## Squares are not clickable
 

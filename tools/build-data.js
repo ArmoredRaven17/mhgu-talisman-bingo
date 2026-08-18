@@ -146,6 +146,48 @@ function pSlots(tier, minSlots) {
   return total ? hit / total : 0;
 }
 
+// P(the charm carries tree `x` at >= `b` AND carries a positive second skill | tier).
+//
+// NOT the product of pHas and pSecond: both conditions live in the same two slots, so they
+// are dependent. The slot-2 pool excludes whatever landed in slot 1, and if `x` is itself the
+// second skill then the OTHER skill is the one that has to be positive — so both placements
+// of `x` are summed separately. No legal slot-1 row can roll zero or negative (checked
+// against all 248 of them), so "every skill positive" reduces to "the second skill is
+// positive" and the first slot needs no guard.
+function pWithPosSecond(tier, x, b) {
+  const L1 = legal(tier, 1), L2 = legal(tier, 2);
+  if (!L1.length || !L2.length) return 0;
+  const inL2 = new Set(L2.map((e) => e[0]));
+  let p = 0;
+
+  // x in slot 1, with any positive tree behind it in slot 2.
+  const e1 = L1.find((e) => e[0] === x);
+  if (e1) {
+    const denom = L2.length - (inL2.has(x) ? 1 : 0);
+    if (denom > 0) {
+      let tail = 0;
+      for (const e of L2) if (e[0] !== x) tail += frac(e[1], e[2], (v) => v > 0);
+      p += (1 / L1.length) * frac(e1[1], e1[2], (v) => v >= b)
+         * SECOND_SKILL_CHANCE * (1 / denom) * tail;
+    }
+  }
+
+  // x in slot 2 at >= b, which is positive by construction since every caller passes b >= 1.
+  // Summed over the slot-1 pick, because that pick sets slot 2's denominator.
+  const e2 = L2.find((e) => e[0] === x);
+  if (e2) {
+    const share = frac(e2[1], e2[2], (v) => v >= b);
+    if (share > 0) {
+      for (const y of L1) {
+        if (y[0] === x) continue;
+        const denom = L2.length - (inL2.has(y[0]) ? 1 : 0);
+        if (denom > 0) p += (1 / L1.length) * SECOND_SKILL_CHANCE * (1 / denom) * share;
+      }
+    }
+  }
+  return p;
+}
+
 // Given the tier, slots and rarity are both independent of the skills and of each other:
 // rollSlots keys off the tier index, and rarity is uniform within the tier. So a composite
 // goal's probability is the product of its three parts.
@@ -163,7 +205,11 @@ function pOf(tier, g) {
   let p = pRar(tier, g);
   if (p === 0) return 0;
   if (g.s != null) p *= pSlots(tier, g.s);
-  if (g.a != null) p *= pHas(tier, g.a, (v) => v >= (g.b || 1));
+  // A named tree plus "every skill positive" is a JOINT, not a product — the two conditions
+  // share the same two slots. Everything else here is genuinely independent of the skills
+  // given the tier, so the remaining branches stay multiplicative.
+  if (g.a != null && g.n === 2 && g.pos) p *= pWithPosSecond(tier, g.a, g.b || 1);
+  else if (g.a != null) p *= pHas(tier, g.a, (v) => v >= (g.b || 1));
   else if (g.n === 2 && g.pos) p *= pSecond(tier, (v) => v > 0);
   else if (g.n === 2) p *= pSecond(tier, () => true);
   else if (g.n === 1) p *= 1 - pSecond(tier, () => true);
@@ -220,15 +266,30 @@ for (const id of reachable) {
 // so the pool starts at 1.
 for (const s of [1, 2, 3]) push("slot", { k: "s:" + s, s: s });
 
-// Rarity: each talisman by name, each roll tier, and two open bands.
+// Rarity is expressed in TALISMAN rarities — the ten named talismans, Pawn through Creator,
+// plus two bands in the same units. The four roll tiers are deliberately not tiles: "mystery"
+// and "timeworn" are charm-table vocabulary that appears nowhere in the game or the UI, and a
+// tile should never be the only place a player meets a word.
 for (let r = 1; r <= 10; r++) push("rar", { k: "re:" + r, re: r });
-for (const t of TIER_ORDER) push("rar", { k: "rt:" + t, tr: t });
 for (const r of [5, 8]) push("rar", { k: "rb:" + r, r: r });
 
-// Combos. Deliberately never skill x skill: two NAMED skills on one charm runs about 1 in
-// 13,000 at its most generous and a median of 1 in 51,000, so all 8,128 such tiles are
-// unwinnable. Slots and rarity are the only second conditions cheap enough to pair with a
-// named skill.
+// Never emit skill x skill. Two NAMED skills on one charm runs about 1 in 16,000 at its most
+// generous and a median of 1 in 49,000 — measured, not guessed — so all 7,047 such tiles are
+// unwinnable and not one clears HARD_FLOOR. Mystery is 30% of draws and has zero legal
+// slot-2 rows, so nearly a third of the draw stream cannot produce a two-skill charm at all.
+//
+// What DOES express "one skill and another" affordably: name one tree and ask only that the
+// second skill be positive. That leans on the 50% gate once instead of also paying a
+// 1-in-74..105 pick, which lands it around 1 in 155 at best — ~70 tiles above the soft floor.
+// Slots and rarity are the only other second conditions cheap enough to pair with a name.
+for (const id of reachable) {
+  const x = slot2Only[id] ? 1 : 0;
+  push("combo", { k: "cq:" + id, a: id, n: 2, pos: 1, x: x });
+  for (const b of [3, 5]) {
+    if (b > maxPts[id]) continue;
+    push("combo", { k: "cq:" + id + ":" + b, a: id, b: b, n: 2, pos: 1, x: x });
+  }
+}
 for (const id of reachable) {
   const x = slot2Only[id] ? 1 : 0;
   for (const s of [1, 2]) push("combo", { k: "cs:" + id + ":" + s, a: id, s: s, x: x });

@@ -20,13 +20,11 @@ Five pools, each toggleable with its own weight:
 | **Skill Points** | Expert +5 or more |
 | **Slot Count** | 2 slots or more |
 | **Rarity** | Roll a King Talisman |
-| **Combo** | Attack, 2+ slots · Two positive skills · A cursed charm |
+| **Combo** | Attack, 2+ slots · Evasion, a positive 2nd skill · A cursed charm |
 
-Under each square is the chance that any one draw satisfies it — the honest difficulty rating. When a
-card stalls, that number tells you which square is holding it up.
-
-Squares are filtered so a card stays winnable. Nothing under about 1 in 1,000 is ever used, and only a
-small budget per card — one square on a 5×5 — is allowed to be harder than about 1 in 300.
+Squares are filtered so a card stays winnable. Nothing hopeless is ever put on a board, and only a
+small budget per card — one square on a 5×5 — is allowed to be a real grind. The odds behind that
+filtering are never shown: not knowing which square will break first is the point.
 
 ## Roll tiers
 

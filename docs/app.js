@@ -69,12 +69,15 @@
   const SIZES = [3, 4, 5, 6, 7, 8, 9, 10];
   const DEFAULT_CFG = { size: 5, free: true, cats: { name: 4, pts: 3, slot: 1, rar: 2, combo: 3 } };
 
-  // Junk-heavy but not punishingly so, and enduring stays the rarest tier. The mix matters
-  // less than it looks: it decides WHICH goals are eligible, while the floor below decides
-  // how long a card takes. Pushing mystery much higher strangles the pool, because no
-  // mystery row has a positive second skill and mystery can never reach two slots — so
-  // every slot, rarity and combo tile drops out with it.
-  const DEFAULT_TIER_W = { mystery: 30, shining: 25, timeworn: 25, enduring: 20 };
+  // How often each charm table is drawn from. Junk-heavy but not punishingly so, and
+  // enduring stays the rarest — the shape of a real charm run.
+  //
+  // FIXED, and deliberately not exposed. It is the closest thing the app has to a house
+  // edge: letting a player raise `enduring` would be letting them rewrite what a draw is
+  // worth, and the draw count is the entire score. It also silently changes which squares
+  // can exist at all — no mystery row has a positive second skill and mystery can never
+  // reach two slots — so a dial here would quietly reshape the card as well as the odds.
+  const TIER_W = { mystery: 30, shining: 25, timeworn: 25, enduring: 20 };
 
   // Two floors, not one.
   //
@@ -113,7 +116,10 @@
 
     const parts = [];
     if (g.a != null) parts.push(treeName(g.a) + (g.b ? " +" + g.b : ""));
-    if (g.n === 2) parts.push(g.pos ? "two positive skills" : "two skills");
+    // With a tree already named, "two positive skills" reads as that tree PLUS two more, so
+    // state what the second skill has to be instead. The bare form keeps the generic wording.
+    if (g.n === 2 && g.pos && g.a != null) parts.push("a positive 2nd skill");
+    else if (g.n === 2) parts.push(g.pos ? "two positive skills" : "two skills");
     if (g.n === 1) parts.push("one skill only");
     if (g.neg != null) parts.push("a skill at " + g.neg + " or worse");
     if (g.s != null) parts.push(g.s === 3 ? "3 slots" : g.s + "+ slots");
@@ -123,10 +129,11 @@
     return text.charAt(0).toUpperCase() + text.slice(1);
   }
 
-  // The sub-line is the odds. It is the honest difficulty pip — a player can see at a
-  // glance which square is the one holding the card up, which matters a lot when a single
-  // hard tile can be most of the run.
-  const oddsText = (p) => p > 0 ? "1 in " + Math.round(1 / p).toLocaleString() : "impossible";
+  // Squares deliberately carry NO sub-line. An earlier version printed each tile's odds
+  // ("1 in 876") as a difficulty pip. It reads as a spoiler: knowing a square is hopeless
+  // before you start turns the card into a spreadsheet, and the whole appeal of charm
+  // farming is not knowing. The probability is still computed — the floors depend on it —
+  // it just never reaches the player.
 
   function goalIcon(g) {
     if (g.re != null) return talismanIcon(g.re);
@@ -154,7 +161,7 @@
       const p = goalProb(g, nw);
       if (p < HARD_FLOOR) continue;
       const cell = {
-        key: g.k, cat: g.c, text: goalText(g).slice(0, MAX_CELL_TEXT), sub: oddsText(p),
+        key: g.k, cat: g.c, text: goalText(g).slice(0, MAX_CELL_TEXT), sub: "",
         icon: goalIcon(g), tint: POOL_COLORS[g.c], p: p, cond: g,
       };
       (p >= SOFT_FLOOR ? soft : hard)[g.c].push(cell);
@@ -232,13 +239,10 @@
     return "MHGU-" + c.size + (effFree(c) ? "F" : "N") + "-" + cats + "-" + token;
   }
 
-  // Covers everything that changes WHICH goals are eligible but isn't in the seed body.
-  // The tier weights belong here rather than in the body because they don't change the
-  // draw order, they change the catalogue being drawn from.
-  function fingerprint(tw) {
-    return ["d" + DATA.dataVersion, "T" + TIERS.map((t) => tw[t] | 0).join(".")].join("|");
-  }
-  const defaultFingerprint = () => b32(hashStr(fingerprint(DEFAULT_TIER_W)), 4);
+  // Covers what changes WHICH goals are eligible but isn't in the seed body. With the tier
+  // weights fixed, that is only the data itself — so a rebuilt catalogue makes old seeds
+  // warn rather than silently produce a different card.
+  const fingerprint = () => "d" + DATA.dataVersion;
 
   function decodeSeed(raw) {
     const s = (raw || "").trim().toUpperCase();
@@ -254,14 +258,13 @@
 
   // ── State ──────────────────────────────────────────────────────────────────
   let cfg = JSON.parse(JSON.stringify(DEFAULT_CFG));
-  let tierW = Object.assign({}, DEFAULT_TIER_W);
   let card = null;
   let bags = null;          // leftover goals per pool, for per-square reroll
   let usedKeys = new Set();
   let showReroll = true;
   let autoTimer = null;
 
-  const tierPairs = () => TIERS.map((t) => [t, tierW[t] | 0]);
+  const TIER_PAIRS = TIERS.map((t) => [t, TIER_W[t]]);
 
   // ── Card construction ──────────────────────────────────────────────────────
   function buildCells(rng, c, pools) {
@@ -313,9 +316,9 @@
   }
 
   function generate(token) {
-    const pools = buildGoalPool(tierW);
+    const pools = buildGoalPool(TIER_W);
     const body = seedBody(cfg, token);
-    const fp = b32(hashStr(fingerprint(tierW)), 4);
+    const fp = b32(hashStr(fingerprint()), 4);
     // Seeded from the body only, exactly as MHGU Bingo does — the fingerprint is advisory
     // and drives the "different settings" banner, never the layout.
     const rng = makeRng(body);
@@ -366,7 +369,7 @@
   // raced the same board", not "we got the same rolls".
   function drawOnce() {
     if (!card || isComplete()) return null;
-    const charm = ROLL.draw(tierPairs());
+    const charm = ROLL.draw(TIER_PAIRS);
     if (!charm) return null;
     const hits = [];
     for (let i = 0; i < card.cells.length; i++) {
@@ -632,8 +635,8 @@
       msgs.push("Only " + (card.need - card.short) + " of " + card.need
         + " squares could be filled — turn on more pools, raise a tier weight, or use a smaller grid.");
     }
-    if (card.fp && card.fp !== b32(hashStr(fingerprint(tierW)), 4)) {
-      msgs.push("This seed was made with different tier weights, so the squares may differ.");
+    if (card.fp && card.fp !== b32(hashStr(fingerprint()), 4)) {
+      msgs.push("This seed was made before the talisman data was updated, so the squares may differ.");
     }
     b.textContent = msgs.join(" ");
     b.classList.toggle("hidden", !msgs.length);
@@ -643,7 +646,7 @@
   // filled at all. Runs on every settings change, so a pool that a tier mix has emptied
   // says so before the player presses New Card.
   function refreshCounts() {
-    const pools = buildGoalPool(tierW);
+    const pools = buildGoalPool(TIER_W);
     let avail = 0;
     for (const c of CATS) {
       const n = pools.soft[c.id].length;
@@ -920,33 +923,6 @@
     }
   }
 
-  function buildTierRows() {
-    const wrap = $("tierList");
-    wrap.textContent = "";
-    for (const t of TIERS) {
-      const row = document.createElement("div");
-      row.className = "cat-row";
-      const l = document.createElement("label");
-      l.className = "chk";
-      l.appendChild(document.createTextNode(TIER_LABEL[t]));
-      const num = document.createElement("input");
-      num.type = "number";
-      num.className = "num";
-      num.min = 0; num.max = 99;
-      num.value = tierW[t] | 0;
-      num.id = "tier_" + t;
-      num.title = ROLL.TIER_RARITIES[t].map((r) => charmName(r)).join(" · ");
-      num.addEventListener("change", () => {
-        num.value = Math.min(99, Math.max(0, parseInt(num.value, 10) || 0));
-        tierW[t] = parseInt(num.value, 10);
-        if (TIERS.every((x) => (tierW[x] | 0) === 0)) { tierW[t] = 1; num.value = 1; }
-        saveSettings(); refreshCounts();
-      });
-      row.appendChild(l);
-      row.appendChild(num);
-      wrap.appendChild(row);
-    }
-  }
 
   // Built from POOL_COLORS rather than repeated in the markup, so the Help legend can never
   // drift from what the cards actually draw.
@@ -968,7 +944,7 @@
   // ── Persistence ────────────────────────────────────────────────────────────
   function saveSettings() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, tierW: tierW, showReroll: showReroll, previewMin: previewMin }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, showReroll: showReroll, previewMin: previewMin }));
     } catch (e) {}
   }
   function saveCard() {
@@ -994,10 +970,6 @@
         cfg.cats[c.id] = Math.min(9, Math.max(0, v));
       }
     }
-    if (d.tierW && typeof d.tierW === "object") {
-      for (const t of TIERS) tierW[t] = Math.min(99, Math.max(0, d.tierW[t] | 0));
-      if (TIERS.every((t) => !tierW[t])) tierW = Object.assign({}, DEFAULT_TIER_W);
-    }
   }
 
   function loadCard() {
@@ -1020,7 +992,7 @@
   }
 
   function rebuildBags() {
-    const pools = buildGoalPool(tierW);
+    const pools = buildGoalPool(TIER_W);
     const rng = makeRng(card ? card.seed + ":bags" : "bags");
     bags = {};
     for (const c of CATS) {
@@ -1031,7 +1003,6 @@
 
   function doReset() {
     cfg = JSON.parse(JSON.stringify(DEFAULT_CFG));
-    tierW = Object.assign({}, DEFAULT_TIER_W);
     showReroll = true;
     previewMin = 5;
     $("showReroll").checked = true;
@@ -1039,7 +1010,6 @@
     $("gridSize").value = String(cfg.size);
     $("freeSpace").checked = cfg.free;
     buildCatRows();
-    buildTierRows();
     syncFreeSpace();
     saveSettings();
     refreshCounts();
@@ -1088,7 +1058,6 @@
 
     loadSettings();
     buildCatRows();
-    buildTierRows();
     buildSwatches();
     buildColourLegend();
     $("gridSize").value = String(cfg.size);
