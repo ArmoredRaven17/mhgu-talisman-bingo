@@ -5,8 +5,9 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 ## Project Overview
 
 MHGU Talisman Bingo is a static bingo-card generator where every square is a **condition on a
-talisman**. Pressing Draw rolls a real, legal charm off the game's own tables and auto-marks every
-open square that charm satisfies. Cards are seeded and shareable; the score is how few draws it took.
+talisman**. It is played like real bingo: **one person draws and calls**, and everyone else marks
+their own card by hand. Pressing Draw rolls a real, legal charm off the game's own tables and
+announces it — it marks nothing. Cards are seeded and shareable, so a group can race one board.
 
 **Live URL:** https://armoredraven17.github.io/mhgu-talisman-bingo/
 
@@ -35,10 +36,12 @@ users keep the stale copy until they hard-refresh.
 
 The seeded RNG lays out the **card**. `drawOnce()` uses `Math.random()` and always will.
 
-A drawn charm marks every open square it satisfies and the player makes no decisions. If the draws
-were derived from the card seed, everyone on a given seed would get a byte-identical game and
-"fewest draws" would have exactly one possible answer. The card is the reproducible part; the luck
-is not. Don't "fix" this by threading the seed into the roller.
+If the draws were derived from the card seed, everyone on a given seed would get a byte-identical
+game and "fewest draws" would have exactly one possible answer. The card is the reproducible part;
+the luck is not. Don't "fix" this by threading the seed into the roller.
+
+This matters more now that one person calls for a table: the caller's stream is the only stream,
+and it has to be a fresh roll every session, not a replay of the seed.
 
 ## Regenerating data
 
@@ -140,11 +143,30 @@ version printed it under each tile as a difficulty pip; it reads as a spoiler, a
 hopeless before you start turns the card into a spreadsheet. Not knowing is the appeal. Don't put it
 back on the tile — the Help modal says only that cards are filtered to stay winnable.
 
-## Squares are not clickable
+## Squares are marked by hand
 
-The draws do the marking. A hand-markable square would quietly invalidate the draw count, which is
-the entire score. `renderCard` builds `<div>`s, not `<button>`s, and wires no click handler — only
-the reroll button on top is interactive. There is no custom-text pool for the same reason.
+**They used to be un-clickable, and that reversed deliberately.** The old model auto-marked every
+square a drawn charm satisfied, and the argument for it was that hand-marking would invalidate the
+draw count, which was the whole score.
+
+That argument only holds for one player on one device. The game is now several people on a shared
+seed with one person calling draws, and the app on any given screen cannot know what its player has
+marked — only they can. So `renderCard` builds squares with `role="button"`, a tab stop and a key
+handler, and `toggleMark()` is the only thing that ever marks.
+
+`drawOnce()` marks nothing. It rolls, announces, and computes `card.hint`: the unmarked squares that
+charm would satisfy. That set is rendered as an **outer glow**, and it is only ever a nudge — the
+player still clicks, and clicking is what swaps the glow for the filled `.marked` state. The glow is
+what a square looks like *before* you claim it, not a second kind of marked. It is a setting
+(`softHighlight`, on by default) because calling a table without the assist is a legitimate way to
+play, and a harder one.
+
+The draw count is now the **caller's clock** rather than an objective score: `firstBingoDraw` and
+`blackoutDraw` are stamped when a player's own marks complete a line or the board, against whatever
+the draw count read at that moment. Still frozen once set, so a later unmark can't move a score that
+already happened.
+
+There is no auto-draw. Draws are one at a time, because a person is reading them out.
 
 ## Pacing
 
@@ -153,16 +175,17 @@ weights — all pacing choices, not derivable from the tables, so the only way t
 the game is to play it a few hundred times. Every simulated card prunes to its own keep-set and
 draws from that same pruned table; simulating against the full tables reports a game nobody plays.
 
-Current 5×5: first line at a median of ~31 draws, blackout at ~1,080.
+It marks automatically, which the app no longer does. That is fine and deliberate: it measures how
+many draws a **perfect** player needs, which is the floor on the caller's clock and exactly the
+quantity the floors and `KEEP_N` move. Real tables will be slower by however much people miss.
+
+Current 5×5: first line at a median of ~28 draws, blackout at ~1,060.
 
 Note the shape that pruning produces: the first line comes *fast* and blackout is the long grind.
 That is intrinsic. Naming one of 20 kept trees is about 1 in 17, so ordinary squares fall quickly,
 while the pair tiles that pruning exists to enable sit at 1 in 200–1,000 and are what the back half
 of the card is waiting on. Raising `KEEP_N` slows the opening but strangles pairs; lowering it does
 the reverse. They trade directly against each other.
-
-`AUTO_BATCH`/`AUTO_TICK` are tuned against that: ~160 draws a second. Faster is worse — the squares
-filling *is* the game.
 
 ## This app shares no state with the other MHGU apps
 

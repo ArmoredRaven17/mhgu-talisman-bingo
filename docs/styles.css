@@ -254,6 +254,28 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
    winColor) instead of only outlining them — a filled run of squares is unmistakable at a
    glance, where a brighter border was not. Must stay after .cell.marked to override its
    background. The glow adds a second, non-colour cue: nothing else on the page glows. */
+/* The soft highlight. A drawn talisman glows every square it would satisfy; it is a nudge,
+   never a mark. The player clicks, and .marked takes over with the full fill and cross — so
+   the glow is what a square looks like BEFORE you claim it, not a second kind of marked.
+   Sits before .cell.marked/.cell.line so claiming a square visibly supersedes the hint. */
+.cell.hint{
+  border-color:var(--accent);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 70%,transparent),
+             0 0 16px 3px color-mix(in srgb,var(--accent) 45%,transparent);
+  animation:hintPulse 1.6s ease-in-out infinite;
+}
+@keyframes hintPulse{
+  0%,100%{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 70%,transparent),
+                     0 0 14px 2px color-mix(in srgb,var(--accent) 38%,transparent)}
+  50%    {box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 90%,transparent),
+                     0 0 22px 5px color-mix(in srgb,var(--accent) 60%,transparent)}
+}
+@media (prefers-reduced-motion:reduce){.cell.hint{animation:none}}
+/* A markable square has to look markable. */
+.cell[role="button"]{cursor:pointer}
+.cell[role="button"]:hover{background:#ffffff14}
+.cell[role="button"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
 .cell.line{
   background:var(--win);
   /* Inset white ring + outer glow. The ring is deliberately not colour-based: --win is a

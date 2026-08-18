@@ -233,7 +233,7 @@
   let bags = null;          // leftover goals per pool, for per-square reroll
   let usedKeys = new Set();
   let showReroll = true;
-  let autoTimer = null;
+  let softHighlight = true;
 
   const TIER_PAIRS = TIERS.map((t) => [t, TIER_W[t]]);
 
@@ -318,7 +318,6 @@
       created: Date.now(), need: built.need, short: built.need - built.filled,
       draws: 0, firstBingoDraw: null, blackoutDraw: null, log: [], last: null,
     };
-    stopAuto();
     renderCard();
     saveCard();
   }
@@ -352,69 +351,58 @@
   // get a byte-identical game and "fewest draws" would have exactly one possible answer.
   // The card is the shared, reproducible part; the luck is not. A shared seed means "we
   // raced the same board", not "we got the same rolls".
+  // Drawing no longer marks anything. One person draws and calls the charm out; everyone
+  // else is looking at their own card on their own device, so the app cannot know what any
+  // given player has marked — only they can say. What it CAN do is point: `hint` is the set
+  // of unmarked squares this charm would satisfy, which the card renders as an outer glow.
+  //
+  // That is the whole reason marking is manual now. Auto-marking made the draw count an
+  // objective score; with several people racing one seed, the draw count is the caller's
+  // clock and the marking is each player's own.
   function drawOnce() {
     if (!card || isComplete()) return null;
     const charm = (view || ROLL.table(card.keep)).draw(TIER_PAIRS);
     if (!charm) return null;
-    const hits = [];
+    const hint = [];
     for (let i = 0; i < card.cells.length; i++) {
       const cell = card.cells[i];
       if (card.marked.has(i) || !cell.cond) continue;
-      if (satisfies(charm, cell.cond)) { card.marked.add(i); hits.push(i); }
+      if (satisfies(charm, cell.cond)) hint.push(i);
     }
     card.draws++;
-    card.last = { charm: charm, hits: hits.length };
-    card.log.unshift({ charm: charm, hits: hits.length, at: card.draws });
+    card.hint = hint;
+    card.last = { charm: charm, hits: hint.length };
+    card.log.unshift({ charm: charm, hits: hint.length, at: card.draws });
     if (card.log.length > 50) card.log.length = 50;
+    return { charm: charm, hits: hint };
+  }
 
-    // Frozen at the moment they happen, rather than recomputed — the score is when you got
-    // there, and a later reroll or reload must not be able to move it.
+  // Marking is the player's call, so the milestones are stamped when THEY complete a line or
+  // the board — against the caller's draw count at that moment. Frozen once set: a later
+  // unmark must not be able to move a score that already happened.
+  function toggleMark(i) {
+    if (!card || i === card.freeIdx) return;
+    const cell = card.cells[i];
+    if (!cell || !cell.cond) return;
+    if (card.marked.has(i)) card.marked.delete(i);
+    else {
+      card.marked.add(i);
+      if (card.hint) card.hint = card.hint.filter((x) => x !== i);
+    }
     if (card.firstBingoDraw == null && completedLines().length) card.firstBingoDraw = card.draws;
     if (card.blackoutDraw == null && isComplete()) card.blackoutDraw = card.draws;
-    return { charm: charm, hits: hits };
+    card.modified = true;
+    renderCard();
+    saveCard();
   }
 
   const totalCells = () => card ? card.cells.filter((c) => c.cat !== "empty").length : 0;
   const isComplete = () => !!card && card.marked.size >= totalCells() && totalCells() > 0;
 
-  function drawBatch(n) {
-    let hit = false;
-    for (let i = 0; i < n; i++) {
-      const r = drawOnce();
-      if (!r) break;
-      if (r.hits.length) hit = true;
-      if (isComplete()) break;
-    }
+  function doDraw() {
+    if (!drawOnce()) return;
     renderCard();
     saveCard();
-    return hit;
-  }
-
-  // Auto-draw runs in batches on a timer rather than one draw per frame: a 5x5 takes a
-  // median of about 700 draws and a bad card several thousand, which is a lot of clicking
-  // and far too slow to watch one at a time. AUTO_STOP is a runaway guard, not a rule —
-  // it only matters if a pool somehow contains a square nothing can satisfy.
-  // Tuned against scripts/simulate.mjs: a 5x5 blacks out in a median of ~730 draws, so
-  // ~160 draws a second finishes a typical card in about five seconds and a bad one in
-  // twenty. Fast enough not to be a chore, slow enough that the squares visibly fill and
-  // the log is worth watching — the filling IS the game, so racing past it is a loss.
-  const AUTO_BATCH = 8, AUTO_TICK = 50, AUTO_STOP = 20000;
-  function startAuto(untilMatch) {
-    stopAuto();
-    if (!card || isComplete()) return;
-    const startedAt = card.draws;
-    $("autoBtn").textContent = "Stop";
-    $("autoBtn").classList.add("accent");
-    autoTimer = setInterval(() => {
-      const hit = drawBatch(untilMatch ? 1 : AUTO_BATCH);
-      if (isComplete() || (untilMatch && hit) || card.draws - startedAt > AUTO_STOP) stopAuto();
-    }, untilMatch ? 16 : AUTO_TICK);
-  }
-  function stopAuto() {
-    if (autoTimer) clearInterval(autoTimer);
-    autoTimer = null;
-    const b = $("autoBtn");
-    if (b) { b.textContent = "Auto"; b.classList.remove("accent"); }
   }
 
   // ── Rendering ──────────────────────────────────────────────────────────────
@@ -432,6 +420,9 @@
       if (cell.cat === "free") el.classList.add("free");
       if (cell.cat === "empty") el.classList.add("empty");
       if (card.marked.has(i)) el.classList.add("marked");
+      // The glow says "this one" — it never marks. Only the player marks, and marking is
+      // what swaps the glow for the filled state.
+      if (softHighlight && card.hint && card.hint.indexOf(i) > -1) el.classList.add("hint");
 
       if (cell.icon) {
         const img = document.createElement("img");
@@ -445,9 +436,20 @@
       txt.className = "cell-text";
       txt.textContent = cell.text;
       el.appendChild(txt);
-      // Squares are not buttons here. Every tile resolves from a draw, so there is no
-      // manual marking to offer — and a hand-markable square would quietly invalidate the
-      // draw count, which is the whole score.
+      // Squares ARE interactive now: one person draws and calls the charm, and each player
+      // marks their own card. A div rather than a <button> because the reroll control nests
+      // inside it, and a button inside a button is invalid — hence the explicit role, tab
+      // stop and key handling.
+      if (cell.cond) {
+        el.setAttribute("role", "button");
+        el.setAttribute("tabindex", "0");
+        el.setAttribute("aria-pressed", card.marked.has(i) ? "true" : "false");
+        el.setAttribute("aria-label", cell.text + (card.marked.has(i) ? ", marked" : ""));
+        el.addEventListener("click", () => toggleMark(i));
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleMark(i); }
+        });
+      }
       if (cell.cat !== "free" && cell.cat !== "empty" && showReroll) {
         const rr = document.createElement("button");
         rr.type = "button";
@@ -593,10 +595,7 @@
       log.appendChild(row);
     }
 
-    const done = isComplete();
-    $("drawBtn").disabled = done;
-    $("draw25Btn").disabled = done;
-    $("autoBtn").disabled = done;
+    $("drawBtn").disabled = isComplete();
   }
 
   function updateSeedBar() {
@@ -921,7 +920,7 @@
   // ── Persistence ────────────────────────────────────────────────────────────
   function saveSettings() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, showReroll: showReroll, previewMin: previewMin }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, showReroll: showReroll, softHighlight: softHighlight, previewMin: previewMin }));
     } catch (e) {}
   }
   function saveCard() {
@@ -937,6 +936,8 @@
     if (!d) return;
     showReroll = d.showReroll !== false;
     $("showReroll").checked = showReroll;
+    softHighlight = d.softHighlight !== false;
+    $("softHighlight").checked = softHighlight;
     if (Number.isInteger(d.previewMin)) previewMin = d.previewMin;
     $("previewMin").value = String(previewMin);
     if (d.cfg && typeof d.cfg === "object") {
@@ -987,8 +988,10 @@
   function doReset() {
     cfg = JSON.parse(JSON.stringify(DEFAULT_CFG));
     showReroll = true;
+    softHighlight = true;
     previewMin = 5;
     $("showReroll").checked = true;
+    $("softHighlight").checked = true;
     $("previewMin").value = "5";
     $("gridSize").value = String(cfg.size);
     $("freeSpace").checked = cfg.free;
@@ -1057,6 +1060,9 @@
     $("showReroll").addEventListener("change", () => {
       showReroll = $("showReroll").checked; saveSettings(); if (card) renderCard();
     });
+    $("softHighlight").addEventListener("change", () => {
+      softHighlight = $("softHighlight").checked; saveSettings(); if (card) renderCard();
+    });
     $("previewMin").addEventListener("change", () => {
       previewMin = parseInt($("previewMin").value, 10); saveSettings(); hidePreview();
     });
@@ -1066,10 +1072,7 @@
     $("newCardBtn").addEventListener("click", newCard);
     $("resetBtn").addEventListener("click", () => guard("Reset everything?", "Reset", doReset));
 
-    $("drawBtn").addEventListener("click", () => { stopAuto(); drawBatch(1); });
-    $("draw25Btn").addEventListener("click", () => { stopAuto(); drawBatch(25); });
-    $("autoBtn").addEventListener("click", () => { if (autoTimer) stopAuto(); else startAuto(false); });
-    $("untilBtn").addEventListener("click", () => { if (autoTimer) stopAuto(); else startAuto(true); });
+    $("drawBtn").addEventListener("click", doDraw);
 
     $("seedApply").addEventListener("click", () => guard("Load that seed?", "Load", applySeed));
     $("seedInput").addEventListener("keydown", (e) => {
