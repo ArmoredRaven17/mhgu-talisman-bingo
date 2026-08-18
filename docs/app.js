@@ -331,13 +331,19 @@
       bag = alt ? bags[alt.id] : null;
     }
     if (!bag || !bag.length) return;
+    // Bags hold RAW GOALS (keyed `k`), not finished cells. They stopped being cell-shaped
+    // when the catalogue moved to goals.js, and this read `g.key` for a while afterwards:
+    // always undefined, so the dedupe never fired and the raw goal went onto the card with
+    // no text, tint or cond — a blank, unmatchable square. Wrap with toCell on the way in.
     let next = null;
-    while (bag.length) { const g = bag.pop(); if (!usedKeys.has(g.key)) { next = g; break; } }
+    while (bag.length) { const g = bag.pop(); if (!usedKeys.has(g.k)) { next = g; break; } }
     if (!next) return;
     usedKeys.delete(cell.key);
-    usedKeys.add(next.key);
-    card.cells[i] = next;
+    usedKeys.add(next.k);
+    card.cells[i] = toCell(next);
     card.marked.delete(i);
+    // A fresh square must not inherit the previous one's glow.
+    if (card.hint) card.hint = card.hint.filter((x) => x !== i);
     card.modified = true;
     renderCard();
     saveCard();
@@ -1010,7 +1016,10 @@
     const rng = makeRng(card ? card.seed + ":bags" : "bags");
     bags = {};
     for (const c of CATS) {
-      const all = pools.soft[c.id].concat(pools.hard[c.id]).filter((g) => !usedKeys.has(g.key));
+      // `g.k` — these are raw goals. usedKeys holds goal keys (a cell's `key` IS its goal's
+      // `k`), so filtering on `g.key` here matched nothing and let squares already on the
+      // card back into the reroll bag.
+      const all = pools.soft[c.id].concat(pools.hard[c.id]).filter((g) => !usedKeys.has(g.k));
       bags[c.id] = weightedShuffle(all, rng);
     }
   }
