@@ -588,10 +588,15 @@
       t.textContent = charmName(entry.charm.r) + " · " + (entry.charm.s || 0) + "s · "
         + entry.charm.k.map((s) => treeName(s[0]) + " " + (s[1] > 0 ? "+" : "") + s[1]).join(", ");
       row.appendChild(n); row.appendChild(t);
+      // Was "+N", from when a draw added N marks by itself. It never meant a bonus or a
+      // score — it is how many squares on THIS card the charm satisfies — and now that
+      // marking is manual it is a to-do count, so it says so rather than implying the app
+      // already did it.
       if (entry.hits) {
         const h = document.createElement("span");
         h.className = "log-hit";
-        h.textContent = "+" + entry.hits;
+        h.textContent = entry.hits + " to mark";
+        h.title = entry.hits + (entry.hits === 1 ? " square on your card matches" : " squares on your card match") + " this talisman";
         row.appendChild(h);
       }
       log.appendChild(row);
