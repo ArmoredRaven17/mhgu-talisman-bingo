@@ -562,8 +562,10 @@
       last.appendChild(charmNode(card.last.charm, card.last.hits));
       const note = document.createElement("div");
       note.className = "charm-note";
+      // Not "marked N squares" any more: the draw marks nothing, the player does. Claiming
+      // otherwise is how a draw that lights one ring while reporting two reads as a bug.
       note.textContent = card.last.hits
-        ? "marked " + card.last.hits + (card.last.hits === 1 ? " square" : " squares")
+        ? "matches " + card.last.hits + (card.last.hits === 1 ? " square" : " squares")
         : "no match";
       last.appendChild(note);
     } else {
