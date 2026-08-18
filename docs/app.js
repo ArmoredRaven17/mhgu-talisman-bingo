@@ -12,6 +12,7 @@
   const $ = (id) => document.getElementById(id);
   const DATA = window.MHGU_TALISMAN_DATA;
   const ROLL = window.TB_ROLL;
+  const GOALS = window.TB_GOALS;
 
   // Every MHGU app publishes under one armoredraven17.github.io origin, and GitHub Pages
   // project sites are paths rather than subdomains — so they all share one localStorage.
@@ -90,6 +91,22 @@
   // (1 in 876), Critical Up, Carving and Capturer. Handicraft is the single most
   // recognisable charm skill in the game, and a card that can never ask for it reads as a
   // bug rather than as a design. One hard square costs about 100 draws on a 5x5.
+  // How many of the 137 skill trees a card keeps. This is the lever that makes a two-skill
+  // tile possible at all: it shrinks the 1-in-74..105 second-slot pick, and with it every
+  // pair in the game. On the full tables the cheapest pair is 1 in 14,030 and the median
+  // 1 in 43,887, so not one clears HARD_FLOOR; at 20 kept the best is about 1 in 210 and
+  // roughly 70 pairs per card clear it.
+  //
+  // 20 rather than fewer because below 16 a random keep-set starts leaving a charm kind with
+  // no legal first skill at all (2.9% of sets at 8 kept), and that kind then rolls nothing
+  // and silently drops out of the draw stream. 20 measured zero such sets in 3,000.
+  const KEEP_N = 20;
+
+  // The other end of the scale. A square that marks on roughly one draw in eight is a second
+  // free space, not a goal, and the pools produce several: "exactly 0 slots" is 1 in 2 and a
+  // Pawn Talisman is 1 in 7. Two floors and no ceiling was the gap that let those through.
+  const CEILING = 1 / 8;
+
   const SOFT_FLOOR = 1 / 300;
   const HARD_FLOOR = 1 / 1000;
   const hardBudgetFor = (need) => Math.floor(need / 16);   // 0 on 3x3 and 4x4, 1 on 5x5, 3 on 7x7
@@ -100,40 +117,20 @@
   const treeName = ROLL.treeName;
   const charmName = ROLL.charmName;
 
-  const slotPhrase = (s) => s === 3 ? "3 slots" : s + " slot" + (s > 1 ? "s" : "") + " or more";
+  const slotPhrase = (s) => s === 1 ? "exactly 1 slot" : "exactly " + s + " slots";
 
-  // A goal is a set of condition fields that are ANDed (see tools/build-data.js for the
-  // full list). Text is composed from whichever are present, so one function covers all
-  // five pools and any combination they produce.
+  // A goal is a set of condition fields that are ANDed (see docs/goals.js for the full list).
+  // Text is composed from whichever are present, so one function covers all five pools.
   function goalText(g) {
     if (g.re != null) return "Roll a " + charmName(g.re);
-    if (g.tr != null) return "Roll a " + TIER_LABEL[g.tr] + " talisman";
-    if (g.c === "slot") return slotPhrase(g.s);
-    if (g.c === "rar") return "Rarity " + g.r + " or higher";
-    // A bare skill needs the verb. Inside a combo the tree name alone reads fine, because
-    // the other clause supplies the rest of the sentence ("Attack, 2+ slots").
-    if (g.c === "name") return "Has " + treeName(g.a);
-
-    const parts = [];
-    if (g.a != null) parts.push(treeName(g.a) + (g.b ? " +" + g.b : ""));
-    // With a tree already named, "two positive skills" reads as that tree PLUS two more, so
-    // state what the second skill has to be instead. The bare form keeps the generic wording.
-    if (g.n === 2 && g.pos && g.a != null) parts.push("a positive 2nd skill");
-    else if (g.n === 2) parts.push(g.pos ? "two positive skills" : "two skills");
-    if (g.n === 1) parts.push("one skill only");
-    if (g.neg != null) parts.push("a skill at " + g.neg + " or worse");
-    if (g.s != null) parts.push(g.s === 3 ? "3 slots" : g.s + "+ slots");
-    if (g.rx != null) parts.push("rarity " + g.rx + " or lower");
-    if (g.r != null) parts.push("rarity " + g.r + "+");
-    const text = parts.join(", ");
-    return text.charAt(0).toUpperCase() + text.slice(1);
+    if (g.se != null) return slotPhrase(g.se);
+    // Two named skills on one talisman. Only reachable because the card prunes the tree pool
+    // to 20 — on the full tables the cheapest pair in the game is past 1 in 14,000.
+    if (g.a2 != null) return treeName(g.a) + " + " + treeName(g.a2);
+    // A bare skill needs the verb; a points goal reads as the tree and its floor.
+    if (g.b) return treeName(g.a) + " +" + g.b + " or more";
+    return "Has " + treeName(g.a);
   }
-
-  // Squares deliberately carry NO sub-line. An earlier version printed each tile's odds
-  // ("1 in 876") as a difficulty pip. It reads as a spoiler: knowing a square is hopeless
-  // before you start turns the card into a spreadsheet, and the whole appeal of charm
-  // farming is not knowing. The probability is still computed — the floors depend on it —
-  // it just never reaches the player.
 
   function goalIcon(g) {
     if (g.re != null) return talismanIcon(g.re);
@@ -141,51 +138,21 @@
     return "";
   }
 
-  // ── Eligibility ────────────────────────────────────────────────────────────
-  // data.js carries each goal's probability GIVEN each tier. The real hit rate is the dot
-  // product with the normalised tier weights, which is why it can't be baked: the weights
-  // are a user control.
-  function normTierW(tw) {
-    const total = TIERS.reduce((a, t) => a + (tw[t] | 0), 0);
-    return total > 0 ? TIERS.map((t) => (tw[t] | 0) / total) : TIERS.map(() => 0);
-  }
-  const goalProb = (g, nw) => g.pt.reduce((a, p, i) => a + p * nw[i], 0);
+  // ── Eligibility ───────────────────────────────────────────────────────
+  // Probabilities are no longer baked into data.js. Each card keeps only KEEP_N of the 137
+  // trees, and every probability depends on which ones, so the catalogue is enumerated and
+  // integrated at generation time by goals.js.
+  const FLOORS = { soft: SOFT_FLOOR, hard: HARD_FLOOR, ceil: CEILING };
+  const buildPools = (keep) => GOALS.build(keep, TIER_W, FLOORS);
+  const satisfies = GOALS.satisfies;
 
-  // Every eligible goal, split into the ordinary band and the hard band, bucketed by pool.
-  // Returned as full cell objects so buildCells only has to pick.
-  function buildGoalPool(tw) {
-    const nw = normTierW(tw);
-    const soft = {}, hard = {};
-    for (const c of CATS) { soft[c.id] = []; hard[c.id] = []; }
-    for (const g of DATA.goals) {
-      const p = goalProb(g, nw);
-      if (p < HARD_FLOOR) continue;
-      const cell = {
-        key: g.k, cat: g.c, text: goalText(g).slice(0, MAX_CELL_TEXT), sub: "",
-        icon: goalIcon(g), tint: POOL_COLORS[g.c], p: p, cond: g,
-      };
-      (p >= SOFT_FLOOR ? soft : hard)[g.c].push(cell);
-    }
-    return { soft: soft, hard: hard };
-  }
+  // Cells carry their goal straight through, so the object the maths scored is the object
+  // the matcher tests — there is no second copy to fall out of step.
+  const toCell = (g) => ({
+    key: g.k, cat: g.c, text: goalText(g).slice(0, MAX_CELL_TEXT),
+    icon: goalIcon(g), tint: POOL_COLORS[g.c], p: g.p, cond: g,
+  });
 
-  // ── Matching ───────────────────────────────────────────────────────────────
-  // The runtime twin of the probability maths in tools/build-data.js. Pure and DOM-free so
-  // scripts/test-roll.mjs can hammer it against the real roller; if a condition field is
-  // added there, add it here or the tile will silently mark on every draw.
-  function satisfies(charm, cond) {
-    if (!charm || !cond) return false;
-    if (cond.a != null && !charm.k.some((x) => x[0] === cond.a && x[1] >= (cond.b || 1))) return false;
-    if (cond.s != null && charm.s < cond.s) return false;
-    if (cond.r != null && charm.r < cond.r) return false;
-    if (cond.rx != null && charm.r > cond.rx) return false;
-    if (cond.re != null && charm.r !== cond.re) return false;
-    if (cond.tr != null && ROLL.tierOf(charm.r) !== cond.tr) return false;
-    if (cond.n != null && charm.k.length !== cond.n) return false;
-    if (cond.pos && !charm.k.every((x) => x[1] > 0)) return false;
-    if (cond.neg != null && !charm.k.some((x) => x[1] <= cond.neg)) return false;
-    return true;
-  }
   // ── Seeded RNG ─────────────────────────────────────────────────────────────
   // Every draw on a card routes through here. Math.random() is used in exactly ONE
   // place in this file (newToken, below) — if a grep turns up two, something has
@@ -242,7 +209,10 @@
   // Covers what changes WHICH goals are eligible but isn't in the seed body. With the tier
   // weights fixed, that is only the data itself — so a rebuilt catalogue makes old seeds
   // warn rather than silently produce a different card.
-  const fingerprint = () => "d" + DATA.dataVersion;
+  // KEEP_N rides here because it changes WHICH goals exist without changing the seed body:
+  // replay an old seed under a different keep size and you get a different card, so it must
+  // warn rather than differ silently.
+  const fingerprint = () => "d" + DATA.dataVersion + "|k" + KEEP_N;
 
   function decodeSeed(raw) {
     const s = (raw || "").trim().toUpperCase();
@@ -259,6 +229,7 @@
   // ── State ──────────────────────────────────────────────────────────────────
   let cfg = JSON.parse(JSON.stringify(DEFAULT_CFG));
   let card = null;
+  let view = null;          // the card's pruned roll table; rebuilt on load, never serialised
   let bags = null;          // leftover goals per pool, for per-square reroll
   let usedKeys = new Set();
   let showReroll = true;
@@ -279,6 +250,14 @@
       hardBags[x.id] = weightedShuffle(pools.hard[x.id].slice(), rng);
     }
 
+    // A pool with nothing above the soft floor is HARD-NATIVE: rare is simply what it is.
+    // Combo is the case that matters — even pruned to 20 trees, most pairs land between the
+    // floors, so charging them against the hard budget would not ration the pool, it would
+    // delete it. The budget exists to stop a pool that COULD have given an ordinary square
+    // from handing over a rare one; it was never meant to veto a pool outright.
+    const hardNative = {};
+    for (const x of active) hardNative[x.id] = !softBags[x.id].length && hardBags[x.id].length > 0;
+
     // Which draw ordinals become hard squares. Chosen up front so the count is exact and
     // seeded, rather than emerging from a per-square coin flip.
     const hardAt = new Set();
@@ -288,7 +267,8 @@
     const used = new Set(), drawn = [];
     while (drawn.length < need) {
       const wantHard = hardAt.has(drawn.length);
-      const live = active.filter((x) => (wantHard ? hardBags : softBags)[x.id].length);
+      const live = active.filter((x) =>
+        hardNative[x.id] ? hardBags[x.id].length : (wantHard ? hardBags : softBags)[x.id].length);
       const pool = live.length ? live : active.filter((x) => softBags[x.id].length || hardBags[x.id].length);
       if (!pool.length) break;
 
@@ -296,37 +276,42 @@
       let r = rng.next() * total, chosen = pool[pool.length - 1];
       for (const x of pool) { r -= c.cats[x.id]; if (r < 0) { chosen = x; break; } }
 
-      const bag = (wantHard && hardBags[chosen.id].length ? hardBags : softBags)[chosen.id];
+      const useHard = hardNative[chosen.id] || (wantHard && hardBags[chosen.id].length);
+      const bag = (useHard ? hardBags : softBags)[chosen.id];
       const goal = (bag.length ? bag : hardBags[chosen.id].length ? hardBags[chosen.id] : softBags[chosen.id]).pop();
       if (!goal) break;
-      if (used.has(goal.key)) continue;
-      used.add(goal.key);
-      drawn.push(goal);
+      if (used.has(goal.k)) continue;
+      used.add(goal.k);
+      drawn.push(toCell(goal));
     }
 
     const cells = [];
     let di = 0;
     for (let i = 0; i < n; i++) {
-      if (i === freeIdx) cells.push({ key: "free", cat: "free", text: "FREE", sub: "", icon: "", tint: POOL_COLORS.free });
+      if (i === freeIdx) cells.push({ key: "free", cat: "free", text: "FREE", icon: "", tint: POOL_COLORS.free });
       else if (di < drawn.length) cells.push(drawn[di++]);
-      else cells.push({ key: "empty:" + i, cat: "empty", text: "—", sub: "", icon: "", tint: "" });
+      else cells.push({ key: "empty:" + i, cat: "empty", text: "—", icon: "", tint: "" });
     }
     // Bags keep the leftovers so a per-square reroll has somewhere to draw from.
     return { cells: cells, freeIdx: freeIdx, need: need, filled: drawn.length, bags: softBags, used: used };
   }
 
   function generate(token) {
-    const pools = buildGoalPool(TIER_W);
     const body = seedBody(cfg, token);
     const fp = b32(hashStr(fingerprint()), 4);
     // Seeded from the body only, exactly as MHGU Bingo does — the fingerprint is advisory
     // and drives the "different settings" banner, never the layout.
     const rng = makeRng(body);
+    // The keep-set comes off the SAME stream that lays out the squares, and before it, so it
+    // never has to ride in the seed string: replay the seed and you replay the tree pool.
+    const keep = GOALS.keepFor(rng, KEEP_N);
+    const pools = buildPools(keep);
+    view = pools.view;
     const built = buildCells(rng, cfg, pools);
     bags = built.bags;
     usedKeys = built.used;
     card = {
-      seed: body + "-" + fp, token: token, fp: fp,
+      seed: body + "-" + fp, token: token, fp: fp, keep: keep,
       cfg: JSON.parse(JSON.stringify(cfg)),
       modified: false, freeIdx: built.freeIdx, cells: built.cells,
       marked: new Set(built.freeIdx >= 0 ? [built.freeIdx] : []),
@@ -369,7 +354,7 @@
   // raced the same board", not "we got the same rolls".
   function drawOnce() {
     if (!card || isComplete()) return null;
-    const charm = ROLL.draw(TIER_PAIRS);
+    const charm = (view || ROLL.table(card.keep)).draw(TIER_PAIRS);
     if (!charm) return null;
     const hits = [];
     for (let i = 0; i < card.cells.length; i++) {
@@ -460,13 +445,6 @@
       txt.className = "cell-text";
       txt.textContent = cell.text;
       el.appendChild(txt);
-      if (cell.sub) {
-        const sub = document.createElement("div");
-        sub.className = "cell-sub";
-        sub.textContent = cell.sub;
-        el.appendChild(sub);
-      }
-
       // Squares are not buttons here. Every tile resolves from a draw, so there is no
       // manual marking to offer — and a hand-markable square would quietly invalidate the
       // draw count, which is the whole score.
@@ -646,18 +624,20 @@
   // filled at all. Runs on every settings change, so a pool that a tier mix has emptied
   // says so before the player presses New Card.
   function refreshCounts() {
-    const pools = buildGoalPool(TIER_W);
+    // A sample keep-set, not the card's: this only decides which grid sizes are offered, and
+    // pool sizes barely move between keep-sets. The real card builds its own.
+    const pools = buildPools(GOALS.keepFor(makeRng("avail"), KEEP_N));
     let avail = 0;
     for (const c of CATS) {
-      const n = pools.soft[c.id].length;
-      const el = $("count_" + c.id);
-      if (el) el.textContent = n ? n + (n === 1 ? " goal" : " goals") : "none at these tiers";
       // Counted from the ordinary band only. The hard band is capped at a couple of squares
       // per card, so folding it in here would claim a grid can be filled when it can't.
-      if ((cfg.cats[c.id] | 0) > 0) avail += n;
+      if ((cfg.cats[c.id] | 0) > 0) avail += pools.soft[c.id].length;
     }
     const n = cfg.size * cfg.size - (effFree(cfg) ? 1 : 0);
-    $("poolStatus").textContent = avail + " goals available · " + n + " squares to fill";
+    // The tally still decides which grid sizes are offered, but it is never printed. A goal
+    // count is the same kind of spoiler as a per-tile probability: it invites counting the
+    // catalogue instead of playing it, and it was the only place the odds leaked back in.
+    $("poolStatus").textContent = n + (n === 1 ? " square to fill" : " squares to fill");
     for (const opt of $("gridSize").options) {
       const need = opt.value * opt.value - ((cfg.free && opt.value % 2 === 1) ? 1 : 0);
       opt.disabled = need > avail && parseInt(opt.value, 10) !== cfg.size;
@@ -909,10 +889,7 @@
 
       const hint = document.createElement("p");
       hint.className = "hint cat-hint";
-      const cnt = document.createElement("span");
-      cnt.id = "count_" + c.id;
-      hint.appendChild(document.createTextNode(c.hint + " · "));
-      hint.appendChild(cnt);
+      hint.textContent = c.hint;
 
       const box = document.createElement("div");
       box.className = "cat-box";
@@ -976,6 +953,11 @@
     let d = null;
     try { d = JSON.parse(localStorage.getItem(CARD_KEY) || "null"); } catch (e) {}
     if (!d || !Array.isArray(d.cells) || !d.cfg) return false;
+    // Cards saved before pruning carry no keep-set, and their conditions use fields the
+    // current matcher no longer reads (minimum slots, rarity bands, skill counts). Restoring
+    // one would not merely look odd — satisfies() would ignore the half it doesn't recognise
+    // and mark the square on a partial match. Drop it and start clean.
+    if (!Array.isArray(d.keep) || !d.keep.length) return false;
     card = d;
     card.marked = new Set(Array.isArray(d.marked) ? d.marked : []);
     card.need = d.need | 0;
@@ -992,7 +974,8 @@
   }
 
   function rebuildBags() {
-    const pools = buildGoalPool(TIER_W);
+    const pools = buildPools((card && card.keep) || GOALS.keepFor(makeRng("avail"), KEEP_N));
+    view = pools.view;
     const rng = makeRng(card ? card.seed + ":bags" : "bags");
     bags = {};
     for (const c of CATS) {

@@ -272,7 +272,6 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 .cell.empty{opacity:.3}
 .cell.empty:hover{background:#ffffff12}
 .cell-icon{width:34%;max-height:38%;object-fit:contain;flex-shrink:0}
-.cell-sub{opacity:.72;line-height:1.1}
 /* A 40-character entry (the MAX_CELL_TEXT cap) needs three lines at 5x5 and four on the
    bigger grids, where the fixed 2px border eats proportionally more of a smaller cell. The
    clamp is a safety net rather than the fitting mechanism, so it sits at four everywhere —
@@ -285,7 +284,6 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
    another rule per size. Still not shrink-to-fit — MAX_CELL_TEXT is what guarantees the
    text fits; this just picks the size for the grid. */
 .bingo-card .cell-text{font-size:calc(10.4cqi / var(--n))}
-.bingo-card .cell-sub{font-size:calc(6.8cqi / var(--n))}
 
 .cell-reroll{
   position:absolute;top:2%;right:2%;opacity:0;transition:opacity .12s;
@@ -318,7 +316,6 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
   gap:6px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.6);cursor:default;
 }
 .tile-preview .cell-text{font-size:17px;-webkit-line-clamp:5}
-.tile-preview .cell-sub{font-size:13px}
 .tile-preview .cell-reroll{display:none}
 .tile-preview .cell.marked::before,
 .tile-preview .cell.marked::after{height:3px;top:calc(50% - 1.5px)}
@@ -386,7 +383,6 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
   .cell.line{background:#4a4a4a !important;color:#fff !important;box-shadow:none !important}
   .cell.line .cell-text{font-weight:700}
   .cell-text{font-size:9pt !important}
-  .cell-sub{font-size:7pt !important}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 

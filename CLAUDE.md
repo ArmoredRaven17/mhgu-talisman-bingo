@@ -19,7 +19,8 @@ build step for the app itself. Do **not** test via `file://`; localStorage origi
 - `docs/styles.css` — all styling, theme CSS variables
 - `docs/app.js` — all application logic (one IIFE, no modules)
 - `docs/roll.js` — the charm roller, ported from `mhgu-charm-farm`
-- `docs/data.js` — **generated**, do not edit by hand
+- `docs/goals.js` — keep-set, goal catalogue, exact probabilities, `satisfies()`
+- `docs/data.js` — **generated**, do not edit by hand; just the tables now
 - `tools/build-data.js` — regenerates `docs/data.js`
 - `scripts/test-roll.mjs`, `scripts/simulate.mjs` — headless checks
 - `talisman_charm_table.json`, `skills.json`, `talisman.json` — vendored from `mhgu-editor`
@@ -53,37 +54,42 @@ node scripts/test-roll.mjs      # always, after a rebuild
 `dataVersion` hashes the source bytes and rides in every seed's fingerprint, so a data rebuild makes
 old seeds *warn* rather than silently produce a different card. Bump `data.js?v=N` afterwards.
 
-## Goals are conditions, and the probabilities are exact
+## Goals are conditions, and the probabilities are computed at runtime
 
-`docs/data.js` holds ~1,540 goals. A goal is a set of optional fields that are **ANDed** — `a` tree,
-`b` minimum points, `s` slots, `r`/`rx`/`re` rarity, `tr` tier, `n` skill count, `pos`, `neg` — plus
-`pt`, its probability under each of the four roll tiers.
+A goal is a set of optional fields that are **ANDed** — `a` tree, `b` minimum points, `a2` a second
+tree, `se` exact slots, `re` exact rarity.
 
-`pt` is computed **in closed form**, not by simulation. `rollCharm` is simple enough to integrate
-exactly, and an exact number makes the probability floor a guarantee rather than a sampling estimate
-— a 1-in-500 goal measured over 400k rolls has seen only ~800 hits, which is not enough to trust.
+**`docs/goals.js` owns all of it**: the keep-set, the goal enumeration, the closed-form
+probabilities and `satisfies()`. Probabilities used to be baked into `data.js` by
+`tools/build-data.js`, four per goal, one per charm kind. Pruning ended that — a card keeps only
+`KEEP_N` of the 137 trees and every probability depends on which ones, so there is no fixed
+catalogue left to bake. `data.js` is now just the tables (10KB, down from 172KB).
 
-Per-tier rather than one number because the tier weights are a user control: the real hit rate is the
-dot product with the normalised weights and can only be known at runtime.
+They are still computed **in closed form**, not by simulation. `rollCharm` is simple enough to
+integrate exactly, and an exact number makes the floors a guarantee rather than a sampling estimate.
 
-**`satisfies()` in `app.js` is the runtime twin of that maths.** If you add a condition field to one,
-add it to the other, or a tile will either mark on charms that don't satisfy it or advertise odds it
-doesn't have. `scripts/test-roll.mjs` is what catches that: it checks every eligible goal's exact
-probability against its empirical hit rate over 400k real draws.
+The old hazard was that `satisfies()` lived in `app.js` while the maths lived in `build-data.js`,
+and a field added to one and not the other silently broke tiles. They are now in the same file,
+adjacent. `scripts/test-roll.mjs` still checks one against the other over 600k real draws — and it
+does so **per keep-set, drawing from the pruned table**, because a closed form that were right only
+on the full tables would pass the old test and be wrong in every real game.
 
-## Two floors, not one
+## Two floors and a ceiling
 
 - `SOFT_FLOOR` (1/300) — what an ordinary square must clear.
 - `HARD_FLOOR` (1/1000) — absolute eligibility.
-- `hardBudgetFor(need)` = `floor(need/16)` squares per card may come from the band between them.
+- `CEILING` (1/8) — absolute *ease*. A square that marks on one draw in eight is a second free
+  space, not a goal. There was no ceiling for a long time and it showed: "rarity 5 or higher" ran
+  at 1 in 2 and "exactly 0 slots" at 1 in 2. Pruning made this urgent rather than academic, because
+  it lifts every single-skill tile at once.
+- `hardBudgetFor(need)` = `floor(need/16)` squares per card may come from the band between the
+  floors.
 
-Below roughly 1-in-300 the pools collapse: at a 1-in-100 floor the points and combo pools go to
-**zero** and the game degenerates into 44 skill names and 16 rarity tiles. So 1/300 is the tightest
-floor that keeps all five pools alive.
-
-The band between the floors is not academic — it holds **Handicraft** (1 in 876), Critical Up,
-Carving and Capturer. Handicraft is the most recognisable charm skill in the game, and a card that
-can never ask for it reads as a bug. One hard square costs about 100 draws on a 5×5.
+**Hard-native pools ignore the budget.** A pool with nothing above the soft floor is rare by nature,
+and combo is exactly that — even pruned, most pairs land between the floors. Charging them against a
+one-square budget does not ration the pool, it deletes it: the pool stops being offered for ordinary
+squares and at most one pair ever reaches a card. The budget exists to stop a pool that *could* have
+given an ordinary square from handing over a rare one; it was never meant to veto a pool outright.
 
 ## Facts about the tables that shape the design
 
@@ -103,20 +109,29 @@ can never ask for it reads as a bug. One hard square costs about 100 draws on a 
 - **Deviant trees 144–179 are excluded by name.** All 36 are below the floor anyway, but the real
   reason is that "Has Bloodbath X" is not a readable bingo tile. Trees 180–205 never appear in any
   table at all.
-- **Never emit skill × skill combos.** Two *named* skills on one charm is 1 in 16,065 at its most
-  generous (Furor + Charmer) and a median of 1 in 49,161, so all 7,047 producible pairs are
-  unwinnable — not one clears `HARD_FLOOR`, and nothing appears at all until a floor of about
-  1 in 20,000. Mystery is 30% of draws and has **zero** legal slot-2 rows, so nearly a third of the
-  stream cannot make a two-skill charm at all. This was tried and reverted; don't re-add it.
-- **What does express "one skill and another": name one tree and ask only that the second skill be
-  positive** (`{a, n: 2, pos: 1}`, the `cq:` pool). That pays the 50% gate once instead of also
-  paying a 1-in-74..105 second pick, which lands it at 1 in 213 at best — 408 tiles, 26 above the
-  soft floor and 227 in the hard band. Its probability is a **joint, not a product**: both
-  conditions live in the same two slots, so `pWithPosSecond` sums the two placements of the named
-  tree rather than multiplying `pHas` by `pSecond`. Slots, rarity and a positive second skill are
-  the only second conditions cheap enough to pair with a named skill. Per-tree *negative* tiles
-  fail like skill × skill does; the generic ones ("a cursed charm", 1 in 7) are cheap because any
-  tree will do, and they're the only tiles that make a junk charm feel like a hit.
+- **Skill × skill works ONLY because the card prunes the table.** On the full 137 trees the
+  cheapest pair in the game is 1 in 14,030 and the median 1 in 43,887 — not one clears
+  `HARD_FLOOR`, and nothing appears until a floor around 1 in 20,000. Pruning to `KEEP_N` = 20
+  attacks the term responsible, the 1-in-74..105 second-slot pick: the best pair becomes about
+  1 in 210 and roughly 70 per card clear the floor. Do not re-enable pairs without pruning, and do
+  not raise `KEEP_N` far without checking they survive — at 40 kept, zero pairs clear the floor
+  again.
+- **`KEEP_N` = 20 is a floor of its own, set by starvation.** A random keep-set can leave a charm
+  kind with no legal first skill, and that kind then rolls nothing and silently drops out of the
+  draw stream. Measured over 3,000 sets: 2.9% at 8 kept, 0.3% at 12, zero at 16 and above. 20 also
+  happens to peak the count of viable pairs. `keepFor()` repairs a starved set anyway, but the
+  margin is why the number is not lower.
+- **Mystery is a hard ceiling on every pair tile.** It has *zero* legal slot-2 rows, so a mystery
+  charm is always single-skilled and 30% of the draw stream can never satisfy a two-skill tile at
+  all. No amount of pruning lifts this.
+- **Rarity is exactly the ten named talismans.** No open bands: "rarity 5 or higher" was 1 in 2,
+  which the `CEILING` now catches on principle. Bands survive only as combo second conditions.
+- **Talisman rarity and charm kind are two different axes.** The vendored table has four keys — the
+  charm kinds — and those alone determine the skill ranges. Rarity (1–10) is the equip id, fixed
+  when the item is created; `TAL_TIER` maps it to a kind purely to know which table bounds a given
+  talisman. Rarities sharing a kind have byte-identical ranges: a Hero, a Legend and a Creator
+  differ in name only. What decides 8 vs 9 vs 10 is the drop, and that data is in none of the
+  vendored files.
 
 ## Odds are never shown to the player
 
@@ -133,12 +148,21 @@ the reroll button on top is interactive. There is no custom-text pool for the sa
 
 ## Pacing
 
-`scripts/simulate.mjs` is the regression guard on the floors and the default tier weights — those are
-a pacing choice, not derivable from the tables, so the only way to know a change broke the game is to
-play it a few hundred times. Current 5×5: first line at a median of ~90 draws, blackout at ~730.
+`scripts/simulate.mjs` is the regression guard on the floors, the ceiling, `KEEP_N` and the tier
+weights — all pacing choices, not derivable from the tables, so the only way to know a change broke
+the game is to play it a few hundred times. Every simulated card prunes to its own keep-set and
+draws from that same pruned table; simulating against the full tables reports a game nobody plays.
 
-`AUTO_BATCH`/`AUTO_TICK` are tuned against that: ~160 draws a second finishes a typical card in about
-five seconds. Faster is worse — the squares filling *is* the game.
+Current 5×5: first line at a median of ~31 draws, blackout at ~1,080.
+
+Note the shape that pruning produces: the first line comes *fast* and blackout is the long grind.
+That is intrinsic. Naming one of 20 kept trees is about 1 in 17, so ordinary squares fall quickly,
+while the pair tiles that pruning exists to enable sit at 1 in 200–1,000 and are what the back half
+of the card is waiting on. Raising `KEEP_N` slows the opening but strangles pairs; lowering it does
+the reverse. They trade directly against each other.
+
+`AUTO_BATCH`/`AUTO_TICK` are tuned against that: ~160 draws a second. Faster is worse — the squares
+filling *is* the game.
 
 ## This app shares no state with the other MHGU apps
 

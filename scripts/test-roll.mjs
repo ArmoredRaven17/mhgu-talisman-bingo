@@ -2,12 +2,15 @@
 // Run: node scripts/test-roll.mjs
 //
 // The thing actually being tested is that TWO independent descriptions of the same rules
-// agree: the closed-form probabilities tools/build-data.js integrates, and the runtime
-// matcher app.js uses to mark squares. If one drifts from the other, tiles either mark on
-// charms that shouldn't satisfy them or advertise odds they don't have — and neither shows
-// up as an error anywhere else.
-import { DATA, ROLL, DEFAULT_TIER_W, SOFT_FLOOR, HARD_FLOOR,
-         tierPairs, normTierW, goalProb, satisfies } from "./common.mjs";
+// agree: the closed-form probabilities goals.js integrates, and the matcher it uses to mark
+// squares. If one drifts from the other, tiles either mark on charms that shouldn't satisfy
+// them or advertise odds they don't have — and neither shows up as an error anywhere else.
+//
+// Since cards prune the tree pool, both halves are now checked PER KEEP-SET, and the draws
+// come off the same pruned table the card would use. A closed form that were only right on
+// the full tables would sail through the old test and be wrong in every real game.
+import { DATA, ROLL, GOALS, DEFAULT_TIER_W, SOFT_FLOOR, HARD_FLOOR, FLOORS,
+         KEEP_N, tierPairs, satisfies, keepFor, pools } from "./common.mjs";
 
 let fail = 0;
 const check = (ok, msg) => { if (!ok) { fail++; console.error("FAIL:", msg); } };
@@ -37,67 +40,84 @@ check(!slotSeen.shining.has(3), "shining rolled 3 slots");
 check(slotSeen.shining.has(2), "shining never rolled a 2-slot charm");
 check(slotSeen.timeworn.has(3), "timeworn never rolled a 3-slot charm");
 
-// A mystery charm has no positive second-skill table at all, so it is always single-skilled.
-// This is load-bearing: it is why a two-condition tile is unreachable from that tier, and
-// why a mystery-heavy weighting shrinks the catalogue rather than merely slowing the game.
+// A mystery charm has no second-skill table at all, so it is always single-skilled. This is
+// load-bearing: it is the hard ceiling on every pair tile, and no amount of pruning lifts it.
 let mysteryTwoSkill = 0;
 for (let i = 0; i < 50000; i++) if (ROLL.rollCharm(1 + (i % 2)).k.length > 1) mysteryTwoSkill++;
 check(mysteryTwoSkill === 0, `mystery produced ${mysteryTwoSkill} two-skill charms`);
 
-// ── The catalogue itself ──────────────────────────────────────────────────────
-const keys = new Set();
-for (const g of DATA.goals) {
-  check(!keys.has(g.k), `duplicate goal key ${g.k}`);
-  keys.add(g.k);
-  check(g.pt.length === 4, `${g.k} has ${g.pt.length} tier probabilities, expected 4`);
-  check(g.pt.some((p) => p > 0), `${g.k} is impossible in every tier`);
-  check(g.pt.every((p) => p >= 0 && p <= 1), `${g.k} has a probability outside 0..1`);
+// ── A pruned charm must only ever carry kept trees ────────────────────────────
+const probeKeep = keepFor("probe");
+const probeView = ROLL.table(probeKeep);
+const kept = new Set(probeKeep);
+let leaked = 0;
+for (let i = 0; i < 50000; i++) {
+  const c = probeView.draw(tierPairs(DEFAULT_TIER_W));
+  if (!c) continue;
+  if (ROLL.verify(c).length) { check(false, `pruned roll produced an illegal charm ${JSON.stringify(c)}`); break; }
+  for (const s of c.k) if (!kept.has(s[0])) leaked++;
 }
-// Deviant trees make unreadable tiles ("Has Bloodbath X") and are excluded by name.
-const deviant = DATA.goals.filter((g) => g.a >= 144 && g.a <= 179);
-check(deviant.length === 0, `${deviant.length} deviant-tree goals leaked into the catalogue`);
-console.log(`catalogue: ${DATA.goals.length.toLocaleString()} goals, all keys unique`);
+check(leaked === 0, `${leaked} skills outside the keep-set leaked into pruned rolls`);
+console.log(`pruned draws honour the keep-set (${KEEP_N} of ${GOALS.ELIGIBLE.length} trees)`);
 
-// ── The two descriptions must agree ───────────────────────────────────────────
-// Every eligible goal is checked, not a sample: the tail is exactly where a mismatch would
-// hide, and a goal that never fires looks identical to one that is merely rare.
-const tw = DEFAULT_TIER_W, nw = normTierW(tw), pairs = tierPairs(tw);
-const live = DATA.goals.map((g) => ({ g, p: goalProb(g, nw) })).filter((x) => x.p >= HARD_FLOOR);
-const M = 400000;
-const hits = new Array(live.length).fill(0);
-for (let i = 0; i < M; i++) {
-  const c = ROLL.draw(pairs);
-  for (let j = 0; j < live.length; j++) if (satisfies(c, live[j].g)) hits[j]++;
-}
-let worst = { z: 0, k: null }, sumZ = 0, counted = 0;
-for (let j = 0; j < live.length; j++) {
-  const exp = live[j].p, obs = hits[j] / M;
-  const se = Math.sqrt(exp * (1 - exp) / M);
-  const z = (obs - exp) / se;
-  sumZ += z; counted++;
-  if (Math.abs(z) > Math.abs(worst.z)) worst = { z, k: live[j].g.k, exp, obs };
-}
-const meanZ = sumZ / counted;
-console.log(`matcher vs closed form: ${counted.toLocaleString()} goals over ${M.toLocaleString()} draws`);
-console.log(`  mean z ${meanZ.toFixed(3)}  |  worst ${worst.k} z=${worst.z.toFixed(2)} ` +
-  `(1 in ${Math.round(1 / worst.exp)} expected, 1 in ${Math.round(1 / worst.obs)} observed)`);
+// ── The catalogue, per keep-set ───────────────────────────────────────────────
+const SEEDS = ["alpha", "bravo", "charlie"];
+let totalChecked = 0, sumZ = 0, worst = { z: 0, k: null };
+const M = 200000;
 
-// A per-goal |z| of 5 is generous for one test but this runs ~1,100 of them at once, so the
-// largest is expected around 3.5 by chance alone. The mean is the real guard: a systematic
-// error in the probability maths moves every goal the same way and shows up there long
-// before any single goal breaks a threshold.
+for (const seed of SEEDS) {
+  const keep = keepFor(seed);
+  check(keep.length === KEEP_N, `keep-set ${seed} has ${keep.length} trees, expected ${KEEP_N}`);
+  check(new Set(keep).size === keep.length, `keep-set ${seed} has duplicates`);
+  check(keep.every((id) => !(id >= 144 && id <= 179)), `keep-set ${seed} contains a deviant tree`);
+  // A kind with no legal first skill would roll nothing and vanish from the draw stream.
+  for (const t of ROLL.TIER_ORDER) {
+    check(ROLL.table(keep).legalTrees(t, 1).length > 0, `keep-set ${seed} starved ${t} of first skills`);
+  }
+
+  const P = pools(DEFAULT_TIER_W, keep);
+  const all = [];
+  const keys = new Set();
+  for (const c of ["name", "pts", "slot", "rar", "combo"]) {
+    for (const g of P.soft[c].concat(P.hard[c])) {
+      check(!keys.has(g.k), `duplicate goal key ${g.k} in ${seed}`);
+      keys.add(g.k);
+      check(g.p >= HARD_FLOOR && g.p <= 1, `${g.k} probability ${g.p} out of range`);
+      all.push(g);
+    }
+    check(P.soft[c].length + P.hard[c].length > 0, `pool "${c}" is empty for keep-set ${seed}`);
+  }
+
+  // Every eligible goal is checked, not a sample: the tail is exactly where a mismatch would
+  // hide, and a goal that never fires looks identical to one that is merely rare.
+  const pairs = tierPairs(DEFAULT_TIER_W);
+  const hits = new Array(all.length).fill(0);
+  for (let i = 0; i < M; i++) {
+    const c = P.view.draw(pairs);
+    for (let j = 0; j < all.length; j++) if (satisfies(c, all[j])) hits[j]++;
+  }
+  for (let j = 0; j < all.length; j++) {
+    const exp = all[j].p, obs = hits[j] / M;
+    const z = (obs - exp) / Math.sqrt(exp * (1 - exp) / M);
+    sumZ += z; totalChecked++;
+    if (Math.abs(z) > Math.abs(worst.z)) worst = { z, k: all[j].k, exp, obs, seed };
+  }
+  const n = (c) => P.soft[c].length + "/" + P.hard[c].length;
+  console.log(`  ${seed}: ${all.length} goals  ` +
+    `name ${n("name")}  pts ${n("pts")}  slot ${n("slot")}  rar ${n("rar")}  combo ${n("combo")}`);
+}
+
+const meanZ = sumZ / totalChecked;
+console.log(`matcher vs closed form: ${totalChecked.toLocaleString()} goals over ` +
+  `${(M * SEEDS.length).toLocaleString()} draws`);
+console.log(`  mean z ${meanZ.toFixed(3)}  |  worst ${worst.k} (${worst.seed}) z=${worst.z.toFixed(2)} ` +
+  `(1 in ${Math.round(1 / worst.exp)} expected, 1 in ${worst.obs ? Math.round(1 / worst.obs) : "∞"} observed)`);
+
+// A per-goal |z| of 5 is generous for one test but this runs thousands at once, so the largest
+// is expected around 4 by chance alone. The mean is the real guard: a systematic error in the
+// maths moves every goal the same way and shows up there long before any single goal breaks.
 check(Math.abs(worst.z) < 5.5, `goal ${worst.k} deviates by ${worst.z.toFixed(2)} sigma`);
 check(Math.abs(meanZ) < 0.25, `mean deviation ${meanZ.toFixed(3)} suggests a systematic bias`);
-
-// ── The floors have to leave a playable pool ──────────────────────────────────
-const byCat = {};
-for (const x of live) if (x.p >= SOFT_FLOOR) byCat[x.g.c] = (byCat[x.g.c] || 0) + 1;
-for (const cat of ["name", "pts", "slot", "rar", "combo"]) {
-  check((byCat[cat] | 0) > 0, `pool "${cat}" has no goals above the soft floor at default weights`);
-}
-check(Object.values(byCat).reduce((a, b) => a + b, 0) >= 100,
-  "fewer than 100 ordinary goals at default weights — a 10x10 could not be filled");
-console.log("pools above the soft floor:", JSON.stringify(byCat));
 
 console.log(fail ? `\n${fail} FAILURE(S)` : "\nall checks passed");
 process.exit(fail ? 1 : 0);

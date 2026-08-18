@@ -89,11 +89,16 @@ window.TB_ROLL = (function () {
 
   // Roll one charm of a given rarity. Always produces a legal charm — verify() below is the
   // assertion that says so, and scripts/test-roll.mjs hammers it.
-  function rollCharm(rarity) {
+  //
+  // `treesFn` is how the pruned tables get in: it is legalTrees for a full roll, or a view's
+  // filtered equivalent. Everything downstream — the 1/n picks, the second-skill gate, the
+  // same-tree exclusion — is identical either way, which is what makes a pruned roll a real
+  // roll on a smaller table rather than a different algorithm.
+  function rollCharmWith(treesFn, rarity) {
     const tier = tierOf(rarity);
     if (!tier) return null;
 
-    const first = legalTrees(tier, 1);
+    const first = treesFn(tier, 1);
     if (!first.length) return null;
     const pick1 = first[ri(first.length)];
     const t1 = pick1[0], r1 = pick1[1];
@@ -106,7 +111,7 @@ window.TB_ROLL = (function () {
     // Note that no mystery row has a positive second half, so a mystery charm is single-
     // skilled in practice. That is why a two-condition tile is unreachable from that tier.
     if (Math.random() < SECOND_SKILL_CHANCE) {
-      const second = legalTrees(tier, 2).filter((e) => e[0] !== t1);
+      const second = treesFn(tier, 2).filter((e) => e[0] !== t1);
       if (second.length) {
         const pick2 = second[ri(second.length)];
         const t2 = pick2[0], r2 = pick2[1];
@@ -119,6 +124,35 @@ window.TB_ROLL = (function () {
     }
 
     return { r: rarity, s: rollSlots(rarity), k: k };
+  }
+
+  const rollCharm = (rarity) => rollCharmWith(legalTrees, rarity);
+
+  // A pruned view of the tables. `keepIds` restricts which trees may roll at all; null gives
+  // the full tables back. Pruning is the only thing that makes a two-skill tile reachable:
+  // it shrinks the 1-in-74..105 second-slot pick, which is the term that otherwise puts every
+  // pair past 1 in 14,000.
+  //
+  // Each view memoises its own legal lists rather than sharing the module cache, because a
+  // card holds one view for its entire life and auto-draw calls it thousands of times.
+  function table(keepIds) {
+    const keep = keepIds && keepIds.length ? new Set(keepIds.map(Number)) : null;
+    const cache = {};
+    function trees(tier, slot) {
+      const key = tier + ":" + slot;
+      if (cache[key]) return cache[key];
+      const full = legalTrees(tier, slot);
+      return (cache[key] = keep ? full.filter((e) => keep.has(e[0])) : full);
+    }
+    return {
+      keep: keep,
+      legalTrees: trees,
+      rollCharm: (rarity) => rollCharmWith(trees, rarity),
+      draw: function (tierWeights) {
+        const tier = pickWeighted(tierWeights);
+        return tier ? rollCharmWith(trees, rollRarity(tier)) : null;
+      },
+    };
   }
 
   function rollRarity(tier) {
@@ -184,6 +218,7 @@ window.TB_ROLL = (function () {
   return {
     TAL_TIER: TAL_TIER, TIER_ORDER: TIER_ORDER, SLOT_TIER_FLOOR: SLOT_TIER_FLOOR,
     TIER_RARITIES: TIER_RARITIES, SLOT_WEIGHTS: SLOT_WEIGHTS,
+    SECOND_SKILL_CHANCE: SECOND_SKILL_CHANCE, table: table,
     tierOf: tierOf, tierIndex: tierIndex, legalTrees: legalTrees,
     rollCharm: rollCharm, rollRarity: rollRarity, rollSlots: rollSlots, draw: draw,
     verify: verify, isGod: isGod, treeName: treeName, charmName: charmName,
