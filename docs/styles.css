@@ -9,7 +9,7 @@
    to a --text-hint that its applyTheme never defines; this app uses --text-dim instead. */
 :root{
   --bg:#3e3e3e; --bg1:#000000; --bg2:#333; --accent:#7a7a7a; --accent-hover:#9a9a9a;
-  --win:#19e0d2;
+  --win:#19e0d2; --hint:#dfe6ef;
   --text:#f3f3f3; --text-dim:#ffffff; --line:#ffffff1f; --card:#ffffff0d;
 }
 *{box-sizing:border-box;scrollbar-color:var(--accent) var(--bg2);scrollbar-width:thin}
@@ -254,24 +254,45 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
    winColor) instead of only outlining them — a filled run of squares is unmistakable at a
    glance, where a brighter border was not. Must stay after .cell.marked to override its
    background. The glow adds a second, non-colour cue: nothing else on the page glows. */
-/* The soft highlight. A drawn talisman glows every square it would satisfy; it is a nudge,
+/* The soft highlight. A drawn talisman rings every square it would satisfy; it is a nudge,
    never a mark. The player clicks, and .marked takes over with the full fill and cross — so
-   the glow is what a square looks like BEFORE you claim it, not a second kind of marked.
-   Sits before .cell.marked/.cell.line so claiming a square visibly supersedes the hint. */
-.cell.hint{
-  border-color:var(--accent);
-  box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 70%,transparent),
-             0 0 16px 3px color-mix(in srgb,var(--accent) 45%,transparent);
-  animation:hintPulse 1.6s ease-in-out infinite;
+   the ring is what a square looks like BEFORE you claim it, not a second kind of marked.
+
+   OUTLINE, not border. Every square carries its pool tint as an INLINE border-color, which
+   beats any class rule — the first version set .cell.hinted{border-color} and it silently
+   never applied, leaving only a shadow drawn in --accent to do the work. Outline sits
+   outside the box, ignores that conflict, and cannot be overridden by the inline style.
+
+   Three cues, not one, because a single colour cannot carry this across every theme and
+   pool tint: a bright ring, a lift, and a pulse. --hint is a LIGHTENED theme colour, so it
+   stays bright on dark themes and goes near-white on pale ones. z-index keeps the ring and
+   its glow above the neighbouring squares instead of tucked under them.
+
+   Named `hinted`, not `hint`: `.hint` is already the utility class for the small grey
+   explanatory paragraphs, and a square matching it would inherit opacity:.72 and
+   font-size:12px — dimming and shrinking the very tile it is trying to draw the eye to. */
+.cell.hinted{
+  outline:3px solid var(--hint);
+  outline-offset:-1px;
+  z-index:2;
+  transform:scale(1.045);
+  box-shadow:0 0 18px 4px color-mix(in srgb,var(--hint) 55%,transparent),
+             inset 0 0 0 9999px color-mix(in srgb,var(--hint) 12%,transparent);
+  animation:hintPulse 1.5s ease-in-out infinite;
 }
 @keyframes hintPulse{
-  0%,100%{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 70%,transparent),
-                     0 0 14px 2px color-mix(in srgb,var(--accent) 38%,transparent)}
-  50%    {box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 90%,transparent),
-                     0 0 22px 5px color-mix(in srgb,var(--accent) 60%,transparent)}
+  0%,100%{outline-color:var(--hint);
+          box-shadow:0 0 14px 3px color-mix(in srgb,var(--hint) 45%,transparent),
+                     inset 0 0 0 9999px color-mix(in srgb,var(--hint) 10%,transparent)}
+  50%    {outline-color:color-mix(in srgb,var(--hint) 80%,var(--text));
+          box-shadow:0 0 26px 7px color-mix(in srgb,var(--hint) 75%,transparent),
+                     inset 0 0 0 9999px color-mix(in srgb,var(--hint) 20%,transparent)}
 }
-@media (prefers-reduced-motion:reduce){.cell.hint{animation:none}}
-/* A markable square has to look markable. */
+/* Marking wins: the claimed state must visibly supersede the nudge. */
+.cell.hinted.marked,.cell.hinted.line{animation:none;transform:none;outline:none}
+@media (prefers-reduced-motion:reduce){
+  .cell.hinted{animation:none;transform:none;outline-width:4px}
+}
 .cell[role="button"]{cursor:pointer}
 .cell[role="button"]:hover{background:#ffffff14}
 .cell[role="button"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

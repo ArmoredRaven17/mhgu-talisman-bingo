@@ -422,7 +422,7 @@
       if (card.marked.has(i)) el.classList.add("marked");
       // The glow says "this one" — it never marks. Only the player marks, and marking is
       // what swaps the glow for the filled state.
-      if (softHighlight && card.hint && card.hint.indexOf(i) > -1) el.classList.add("hint");
+      if (softHighlight && card.hint && card.hint.indexOf(i) > -1) el.classList.add("hinted");
 
       if (cell.icon) {
         const img = document.createElement("img");
@@ -739,6 +739,28 @@
     return hslToRgb([hue, sat, 0.22]);
   }
 
+  // The hint ring, which has to be the most visible thing on the card for the moment it is
+  // up. It cannot be --accent: that is darken(c,.70), byte-identical to --bg, so a ring drawn
+  // in it has a contrast ratio of exactly 1.00 against the square behind it. That is how the
+  // highlight first shipped and why it was hard to see.
+  //
+  // A fixed lighten() is not enough either. It is bright on the dark themes and washes out on
+  // the pale ones — measured 1.7:1 on the pale yellow, against 8:1 on the dark green. So this
+  // searches the whole lightness axis at the theme's own hue and keeps whatever contrasts
+  // best against the card well, which means it goes light on dark themes and dark on pale
+  // ones rather than assuming every theme is dark enough to take a white ring.
+  function hintColor(c) {
+    const well = darken(c, .40);
+    const [hue, sat] = rgbToHsl(c);
+    let best = null, bestRatio = 0;
+    for (let l = 0.97; l >= 0.06; l -= 0.03) {
+      const cand = hslToRgb([hue, sat, l]);
+      const r = contrast(cand, well);
+      if (r > bestRatio) { bestRatio = r; best = cand; }
+    }
+    return best || WHITE;
+  }
+
   // Every theme in COLORS is a dark one, so there's no light branch to switch on.
   function applyTheme(hex) {
     const c = hexRgb(hex), r = document.documentElement.style;
@@ -752,6 +774,7 @@
     r.setProperty("--accent",       css(accent));
     r.setProperty("--accent-hover", css(lighten(c, .40)));
     r.setProperty("--win",          css(winColor(c)));
+    r.setProperty("--hint",         css(hintColor(c)));
     r.setProperty("--cta",          css(ctaColor(c)));
     r.setProperty("--text",     "#ffffff");
     r.setProperty("--text-dim", "#fffffff5");
