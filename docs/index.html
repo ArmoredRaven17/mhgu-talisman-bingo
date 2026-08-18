@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache">
+<title>MHGU Talisman Bingo</title>
+<meta name="description" content="A bingo card of talisman conditions — keep drawing charms until one fills the line you needed.">
+<link rel="icon" type="image/png" href="assets/TalismanIcons/icon_talisman_r10.png">
+<!-- Bump ?v= on any styles/app/data change so browsers fetch fresh copies (no hard-refresh needed) -->
+<link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+<div id="app">
+  <!-- Title bar -->
+  <header class="titlebar titlebar-header">
+    <img class="title-icon" src="assets/MonsterIcons/MHGU-Question_Mark_Icon.webp" alt="">
+    <h1>MHGU Talisman Bingo</h1>
+    <div class="seedbar">
+      <input id="seedInput" type="text" spellcheck="false" autocomplete="off" placeholder="Seed — paste one to rebuild that card">
+      <span id="seedModified" class="seed-modified hidden" title="This card was rerolled, so the seed no longer rebuilds it">edited</span>
+      <button id="seedCopy" class="btn tiny">Copy</button>
+      <button id="seedApply" class="btn tiny">Load</button>
+    </div>
+    <button id="newCardBtn" class="icon-btn" title="New Card" aria-label="New Card">&#8635;</button>
+    <button id="linksBtn" class="icon-btn" title="Other MHGU apps" aria-label="Other MHGU apps">&#128279;</button>
+    <button id="helpBtn" class="icon-btn" title="Help" aria-label="Help">?</button>
+    <button id="themeBtn" class="icon-btn" title="Theme" aria-label="Theme">&#9881;</button>
+  </header>
+
+  <main class="layout">
+    <!-- Sidebar: card config -->
+    <aside class="sidebar">
+      <button id="generateBtn" class="btn block accent">New Card</button>
+      <p id="poolStatus" class="hint"></p>
+
+      <section class="panel" data-open="true">
+        <button class="panel-head">Card Setup <span class="chev">&#9662;</span></button>
+        <div class="panel-body">
+          <label class="field">Grid size
+            <select id="gridSize">
+              <option value="3">3 &times; 3</option>
+              <option value="4">4 &times; 4</option>
+              <option value="5" selected>5 &times; 5</option>
+              <option value="6">6 &times; 6</option>
+              <option value="7">7 &times; 7</option>
+              <option value="8">8 &times; 8</option>
+              <option value="9">9 &times; 9</option>
+              <option value="10">10 &times; 10</option>
+            </select>
+          </label>
+          <label class="chk"><input type="checkbox" id="freeSpace" checked>Free space in the centre</label>
+          <p class="hint">Only odd sizes can have a free space.</p>
+          <label class="chk"><input type="checkbox" id="showReroll" checked>Reroll button on squares</label>
+          <label class="field">Enlarge squares on hover
+            <select id="previewMin">
+              <option value="0">Off</option>
+              <option value="3">3 &times; 3 and up</option>
+              <option value="4">4 &times; 4 and up</option>
+              <option value="5" selected>5 &times; 5 and up</option>
+              <option value="6">6 &times; 6 and up</option>
+              <option value="7">7 &times; 7 and up</option>
+              <option value="8">8 &times; 8 and up</option>
+              <option value="9">9 &times; 9 and up</option>
+              <option value="10">10 &times; 10 and up</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel" data-open="true">
+        <button class="panel-head">Card Pools <span class="chev">&#9662;</span></button>
+        <div class="panel-body">
+          <p class="hint">What goes in the squares. Weight biases how often a pool is drawn.</p>
+          <div id="catList"></div>
+        </div>
+      </section>
+
+      <section class="panel" data-open="false">
+        <button class="panel-head">Roll Tiers <span class="chev">&#9662;</span></button>
+        <div class="panel-body">
+          <p class="hint">Which charm tables the draws come from. Higher weight, more often
+             drawn &mdash; set one to 0 to shut it out entirely.</p>
+          <div id="tierList"></div>
+          <p class="hint">Mystery talismans never carry a second skill and never reach two
+             slots, so leaning on them shrinks what a card can ask for. The goal counts
+             above follow whatever you set here.</p>
+        </div>
+      </section>
+
+      <button id="resetBtn" class="btn block">Reset</button>
+    </aside>
+
+    <!-- Card + draw panel -->
+    <section class="stage">
+      <div id="banner" class="banner hidden"></div>
+      <div class="card-wrap">
+        <div id="bingoCard" class="bingo-card"></div>
+      </div>
+      <p id="status" class="status" aria-live="polite"></p>
+
+      <div class="drawbar">
+        <div class="draw-controls">
+          <button id="drawBtn" class="btn accent block">Draw Talisman</button>
+          <div class="row gap">
+            <button id="draw25Btn" class="btn tiny" style="flex:1" title="Roll 25 talismans at once">&times;25</button>
+            <button id="untilBtn" class="btn tiny" style="flex:1" title="Keep drawing until something matches">Until match</button>
+            <button id="autoBtn" class="btn tiny" style="flex:1" title="Keep drawing until the card is finished">Auto</button>
+          </div>
+          <p class="draw-count">Draws: <strong id="drawCount">0</strong></p>
+          <p id="drawScore" class="hint"></p>
+        </div>
+        <div id="lastCharm" class="last-charm"></div>
+        <div class="draw-log-wrap">
+          <p class="hint">Recent draws</p>
+          <div id="drawLog" class="draw-log"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ── Modals (siblings of #app) ─────────────────────────────────────────────── -->
+<div id="helpModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>MHGU Talisman Bingo</h2>
+    <p>Every square is a <strong>condition on a talisman</strong>. Press <strong>Draw
+       Talisman</strong> and the app rolls a real, legal charm off the game's own tables;
+       every open square that charm satisfies marks itself. Complete a row, column or
+       diagonal for a bingo, or fill the whole board for a blackout.</p>
+    <p>There is nothing to click on the card &mdash; the draws do the marking. Your score is
+       how few draws it took.</p>
+
+    <h3>Pools</h3>
+    <ul>
+      <li><strong>Skill Name</strong> &mdash; the charm carries a skill at all, e.g.
+          <em>Has Expert</em>.</li>
+      <li><strong>Skill Points</strong> &mdash; that skill at or above a number, e.g.
+          <em>Expert +5 or more</em>.</li>
+      <li><strong>Slot Count</strong> &mdash; <em>2 slots or more</em>.</li>
+      <li><strong>Rarity</strong> &mdash; a specific talisman, a whole table, or a band:
+          <em>Roll a King Talisman</em>.</li>
+      <li><strong>Combo</strong> &mdash; two conditions at once, plus the ones about the
+          <em>shape</em> of a charm: two skills, a cursed second skill, a single-skill
+          three-slotter.</li>
+    </ul>
+
+    <h3>The odds under each square</h3>
+    <p>The small line on a square is the chance that any one draw satisfies it, at your
+       current tier weights. It is the honest difficulty rating &mdash; when a card stalls,
+       that number tells you which square is holding it up.</p>
+    <p>Squares are filtered so a card stays winnable: nothing under about 1 in 1,000 is ever
+       used, and only a small budget of squares per card is allowed to be harder than about
+       1 in 300. On a 5&times;5 that budget is one square.</p>
+
+    <h3>Colours</h3>
+    <p>A square's outline tells you which pool it came from.</p>
+    <div id="legend" class="legend"></div>
+    <p class="hint" style="margin-top:10px">A marked square keeps its colour but lightens and
+       draws a cross through it. A completed line overrides all of that and fills the squares
+       solid, in a colour picked to contrast with whatever theme you're using.</p>
+
+    <h3>Roll Tiers</h3>
+    <p>Charms come off four tables. Mystery rolls the junk (Pawn and Bishop talismans),
+       enduring rolls the good stuff (Hero, Legend, Creator). The weights decide how often
+       each is drawn.</p>
+    <p>They are a real difficulty lever, but not the one you'd expect: they mostly decide
+       <em>which squares can exist</em> rather than how long a card takes. A mystery talisman
+       never carries a second skill and never reaches two slots, so a mystery-heavy mix
+       leaves far fewer conditions reachable &mdash; and the app simply stops offering the
+       ones it can't produce.</p>
+
+    <h3>Seeds</h3>
+    <p>Every card has a seed like <code>MHGU-5F-N4P3S1R2C3-K7T2NX-9C4A</code>, shown in the
+       title bar. Paste one back to rebuild that board.</p>
+    <p><strong>The draws are not seeded.</strong> Two people on the same seed get the same
+       twenty-five squares and completely different luck &mdash; which is the point, because
+       the marking is automatic and a shared draw stream would give everyone an identical
+       game with exactly one possible score.</p>
+    <p>The seed carries your grid size and pool weights but not your tier weights. If they
+       differ from the ones the card was made with, a banner says so.</p>
+
+    <h3>Rerolling</h3>
+    <p>Hover a square and hit <strong>&#8635;</strong> to swap just that condition. Once you
+       do, the seed no longer rebuilds the card &mdash; it's marked <em>edited</em>.</p>
+
+    <p class="hint">Progress and settings are saved in this browser. Printing (Ctrl&#8209;P)
+       gives a clean black-and-white card.</p>
+    <div class="row end gap"><button id="helpClose" class="btn">Close</button></div>
+  </div>
+</div>
+
+<div id="linksModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>Other MHGU Apps</h2>
+    <p class="muted">Companion fan tools by the same author. Each opens in a new tab.</p>
+    <ul class="app-links">
+      <li>
+        <a href="https://armoredraven17.github.io/MHGU-Quest-Randomizer/" target="_blank" rel="noopener">Quest Randomizer</a>
+        <span class="app-desc">Rolls random quests when you can't decide what to hunt.</span>
+      </li>
+      <li>
+        <a href="https://armoredraven17.github.io/mhgu-collection-tracker/" target="_blank" rel="noopener">Collection Tracker</a>
+        <span class="app-desc">Tracks which weapons, armor and Palico gear you own, and what it costs to finish them.</span>
+      </li>
+      <li>
+        <a href="https://armoredraven17.github.io/mhgu-equipment-box/" target="_blank" rel="noopener">Equipment Box</a>
+        <span class="app-desc">Mirrors the in-game box — 2000 hunter slots and 1000 Palico — so you can plan where things sit.</span>
+      </li>
+      <li>
+        <a href="https://armoredraven17.github.io/MHGU-Bingo/" target="_blank" rel="noopener">Bingo</a>
+        <span class="app-desc">Builds a bingo card of hunting goals, with a shareable seed so a group can race the same board.</span>
+      </li>
+      <li>
+        <a href="https://armoredraven17.github.io/MHGU-Hunting-Log/" target="_blank" rel="noopener">Hunting Log</a>
+        <span class="app-desc">Keeps a running record of your hunts — what you were after, what you wore, who came along.</span>
+      </li>
+      <li>
+        <a href="https://armoredraven17.github.io/MHGU-Zenny-Gauntlet/" target="_blank" rel="noopener">Zenny Gauntlet</a>
+        <span class="app-desc">A scored challenge run — fail a hunt or get carted and you lose that weapon/style combo for the rest of the run.</span>
+      </li>
+      <li>
+        <a href="https://armoredraven17.github.io/mhgu-set-builder/" target="_blank" rel="noopener">Set Builder</a>
+        <span class="app-desc">Assemble a full set by hand and see exactly which skills it activates.</span>
+      </li>
+      <li>
+        <a href="https://armoredraven17.github.io/mhgu-weapon-trees/" target="_blank" rel="noopener">Weapon Trees</a>
+        <span class="app-desc">Browse every weapon upgrade tree, with full stats on any node you click.</span>
+      </li>
+      <li>
+        <a href="https://armoredraven17.github.io/MHGU-Challenge-Run/" target="_blank" rel="noopener">Challenge Run</a>
+        <span class="app-desc">A permadeath challenge run — start from a root weapon, lose it on any quest failure, clear every Key Quest.</span>
+      </li>
+      <li>
+        <a href="https://armoredraven17.github.io/mhgu-charm-farm/" target="_blank" rel="noopener">Charm Farm</a>
+        <span class="app-desc">A Clicker/Idle game about beating up various Brachydios until you finally get the desired God Charms you always wanted.</span>
+      </li>
+      <li class="current">
+        <span class="app-name">Talisman Bingo <span class="app-here">you are here</span></span>
+        <span class="app-desc">A bingo card of talisman conditions — keep drawing charms until one finally fills the line you needed.</span>
+      </li>
+    </ul>
+    <div class="row end gap">
+      <button id="linksClose" class="btn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="themeModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>Theme</h2>
+    <div id="swatches" class="swatches"></div>
+    <div class="row end gap"><button id="themeClose" class="btn">Close</button></div>
+  </div>
+</div>
+
+<div id="confirmModal" class="modal hidden">
+  <div class="modal-card" style="width:min(340px,90vw)">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmBody"></p>
+    <div class="row end gap">
+      <button id="confirmCancel" class="btn">Cancel</button>
+      <button id="confirmOk" class="btn accent"></button>
+    </div>
+  </div>
+</div>
+
+<div id="tilePreview" class="tile-preview"></div>
+
+<script src="data.js?v=1"></script>
+<script src="roll.js?v=1"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>

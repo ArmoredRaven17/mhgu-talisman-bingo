@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mhgu-talisman-bingo",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "5582",
+        "--directory",
+        "docs"
+      ],
+      "port": 5582
+    }
+  ]
+}
