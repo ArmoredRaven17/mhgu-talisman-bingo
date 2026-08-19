@@ -509,6 +509,8 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 }
 .modetab:hover{opacity:.85}
 .modetab.on{opacity:1;background:var(--well);border-bottom-color:transparent;color:var(--text)}
+.modetab:disabled,.modetab.locked{opacity:.3;cursor:not-allowed}
+.modetab:disabled:hover{opacity:.3}
 .modetab:focus-visible{outline:2px solid var(--cta);outline-offset:2px}
 
 /* Live-session controls. Deliberately quiet: going live is a thing you do once at the

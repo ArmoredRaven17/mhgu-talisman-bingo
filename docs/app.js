@@ -507,6 +507,8 @@
   const isComplete = () => !!card && card.marked.size >= totalCells() && totalCells() > 0;
 
   function doDraw() {
+    // Last line: a follower never advances their own counter, whatever UI they reached.
+    if (live && !live.mine && !liveLost) return false;
     if (!drawOnce()) return false;
     renderCard();
     saveCard();
@@ -1248,6 +1250,16 @@
     // because a second copy of the control is how it ended up findable from neither.
     renderTwitch();
 
+    // Drawing belongs to the session owner. A follower who reached the Gamemaster tab could
+    // press Draw and advance their OWN card past the session -- not a cosmetic problem, a
+    // permanent desync, since card.draws is what syncTo() counts forward from.
+    const gmTab = $("tabGm");
+    gmTab.disabled = following;
+    gmTab.classList.toggle("locked", following);
+    gmTab.title = following
+      ? "The Gamemaster draws for this session — your card follows along"
+      : "";
+
     const hosting = !!live && live.mine && !liveLost;
     if (liveLost) {
       liveNote("joinStatus", "Lost the session — keep playing off what the Gamemaster calls.", true);
@@ -1386,6 +1398,9 @@
   }
 
   function setMode(next) {
+    // Following a session pins you to Player. Belt and braces with the disabled tab above:
+    // this is the only funnel into gm mode, including the persisted setting on boot.
+    if (next === "gm" && live && !live.mine && !liveLost) next = "player";
     mode = next === "player" ? "player" : "gm";
     $("tabGm").setAttribute("aria-selected", mode === "gm" ? "true" : "false");
     $("tabPlayer").setAttribute("aria-selected", mode === "player" ? "true" : "false");
