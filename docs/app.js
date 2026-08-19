@@ -508,7 +508,7 @@
 
   function doDraw() {
     // Last line: a follower never advances their own counter, whatever UI they reached.
-    if (live && !live.mine && !liveLost) return false;
+    if (live && !live.mine) return false;
     if (!drawOnce()) return false;
     renderCard();
     saveCard();
@@ -1253,10 +1253,14 @@
     // Drawing belongs to the session owner. A follower who reached the Gamemaster tab could
     // press Draw and advance their OWN card past the session -- not a cosmetic problem, a
     // permanent desync, since card.draws is what syncTo() counts forward from.
+    // NOT gated on liveLost: losing the connection does not make you the session owner. The
+    // manual controls come back so you can play by ear, but drawing as Gamemaster would
+    // advance your own counter and desync you for good once the connection returns.
+    const isFollower = !!live && !live.mine;
     const gmTab = $("tabGm");
-    gmTab.disabled = following;
-    gmTab.classList.toggle("locked", following);
-    gmTab.title = following
+    gmTab.disabled = isFollower;
+    gmTab.classList.toggle("locked", isFollower);
+    gmTab.title = isFollower
       ? "The Gamemaster draws for this session — your card follows along"
       : "";
 
@@ -1423,7 +1427,7 @@
   function setMode(next) {
     // Following a session pins you to Player. Belt and braces with the disabled tab above:
     // this is the only funnel into gm mode, including the persisted setting on boot.
-    if (next === "gm" && live && !live.mine && !liveLost) next = "player";
+    if (next === "gm" && live && !live.mine) next = "player";
     mode = next === "player" ? "player" : "gm";
     $("tabGm").setAttribute("aria-selected", mode === "gm" ? "true" : "false");
     $("tabPlayer").setAttribute("aria-selected", mode === "player" ? "true" : "false");
@@ -1650,7 +1654,6 @@
     // After the card is restored or generated, so buildEntryForm can read card.keep.
     setMode(mode);
     renderLive();
-    restoreLive();
     if (urlSession) {
       setMode("player");
       $("joinSession").value = urlSession;
@@ -1698,7 +1701,11 @@
     window.addEventListener("scroll", hidePreview, true);
 
     refreshCounts();
-    if (loadCard()) renderCard(); else generate(newToken());
+    if (loadCard()) renderCard(); else generate(newToken(), newPlayer());
+    // AFTER the card exists: restoreLive compares the stored session against card.session, so
+    // running it earlier in boot (where setMode and renderLive sit) always bailed on !card and
+    // silently dropped every reloading viewer out of their session.
+    restoreLive();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
