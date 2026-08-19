@@ -1271,6 +1271,26 @@
     }
   }
 
+  // A viewer on a stream refreshes. Without this, `live` is in-memory only, so a reload
+  // silently drops them out of the session: the card stops updating, the Gamemaster tab
+  // unlocks again, and nothing says why. Only the session and which side you were on need
+  // storing — drawAt(n) reconstructs the rest.
+  const LIVE_KEY = "mhgu-talisman-bingo-live";
+  function rememberLive() {
+    try {
+      if (live) localStorage.setItem(LIVE_KEY, JSON.stringify({ session: live.session, mine: !!live.mine }));
+      else localStorage.removeItem(LIVE_KEY);
+    } catch (e) {}
+  }
+  function restoreLive() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(LIVE_KEY) || "null"); } catch (e) {}
+    if (!d || !d.session || !card || card.session !== d.session) return;
+    live = { session: d.session, n: card.draws | 0, ended: false, owner: null, mine: !!d.mine };
+    renderLive();
+    startPolling();
+  }
+
   async function goLive() {
     if (!card) return;
     if (!getToken()) {
@@ -1281,6 +1301,7 @@
       const st = await api("/live", { method: "POST", body: JSON.stringify({ session: card.session }) });
       live = { session: st.session, n: st.n | 0, ended: false, owner: st.owner, mine: true };
       liveLost = false;
+      rememberLive();
       renderLive();
     } catch (e) {
       if (e.message === "not_logged_in") {
@@ -1298,6 +1319,7 @@
     try { await api("/live/" + encodeURIComponent(live.session) + "/end", { method: "POST" }); } catch (e) {}
     live = null;
     stopPolling();
+    rememberLive();
     renderLive();
     liveNote("gmLiveStatus", "Session ended.");
   }
@@ -1315,6 +1337,7 @@
       }
       live = { session: st.session, n: st.n | 0, ended: !!st.ended, owner: st.owner, mine: false };
       liveLost = false;
+      rememberLive();
       // You joined someone's game; put you where you play it rather than making you find the tab.
       if (mode !== "player") setMode("player");
       const caught = syncTo(st.n);
@@ -1627,6 +1650,7 @@
     // After the card is restored or generated, so buildEntryForm can read card.keep.
     setMode(mode);
     renderLive();
+    restoreLive();
     if (urlSession) {
       setMode("player");
       $("joinSession").value = urlSession;
