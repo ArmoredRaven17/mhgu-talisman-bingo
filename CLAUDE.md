@@ -38,7 +38,7 @@ A seed is in two halves:
 
 ```
 MHGU-5F-N4P3S1R2C3-EYBKVK-DCK0-HMGF
-\_________ session ________/ \pl/ p/
+|________ session _________| |pl | |fp|
 ```
 
 Three streams come off it, and which half feeds which is the whole design:
