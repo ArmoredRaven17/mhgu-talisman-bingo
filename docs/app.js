@@ -1329,6 +1329,30 @@
   // Every outcome reports INSIDE the modal. Failures used to go to gmLiveStatus, which lives
   // in the panel under the card, so pressing Start and having it fail looked like nothing
   // happened at all.
+  // A new card WITHOUT leaving the session. The session fixes the tree pool and the whole
+  // talisman sequence; only the player token picks the squares. So reroll the token, keep the
+  // session, and catch straight back up to the current draw.
+  //
+  // Better than disabling New Card mid-session: a viewer who dislikes their board can take a
+  // fresh one and keep playing, instead of choosing between a bad card and leaving.
+  function newCardInSession() {
+    const d = decodeSeed(live.session);
+    // Rebuild cfg from the session, or a locally changed pool weight would alter the seed
+    // body and quietly produce a DIFFERENT session.
+    if (d.cfg && CATS.some((c) => (d.cfg.cats[c.id] | 0) > 0)) {
+      cfg = d.cfg;
+      $("gridSize").value = String(cfg.size);
+      buildCatRows();
+      syncFreeSpace();
+      saveSettings();
+      refreshCounts();
+    }
+    const target = live.n | 0;
+    generate(d.token, newPlayer());
+    if (live && live.session === card.session) syncTo(target);
+    renderLive();
+  }
+
   async function goLive() {
     if (!card) return;
     if (!getToken()) {
@@ -1675,7 +1699,9 @@
       previewMin = parseInt($("previewMin").value, 10); saveSettings(); hidePreview();
     });
 
-    const newCard = () => guard("New card?", "New card", () => generate(newToken(), newPlayer()));
+    const newCard = () => guard("New card?", "New card", () => {
+      if (live) newCardInSession(); else generate(newToken(), newPlayer());
+    });
     $("generateBtn").addEventListener("click", newCard);
     $("newCardBtn").addEventListener("click", newCard);
     $("resetBtn").addEventListener("click", () => guard("Reset everything?", "Reset", doReset));
