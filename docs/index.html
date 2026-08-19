@@ -137,7 +137,11 @@
           <p id="drawScore" class="hint"></p>
 
           <div class="live-box">
+            <p id="twitchWho" class="hint hidden"></p>
             <button id="goLiveBtn" class="btn tiny block">Go live</button>
+            <p id="twitchWhy" class="hint">Hosting a live session signs you in with Twitch. It only
+               reads your channel name &mdash; no scopes, nothing posted, nothing else stored.</p>
+            <button id="signOutBtn" class="btn tiny block hidden">Sign out of Twitch</button>
             <p id="gmLiveStatus" class="hint"></p>
             <label class="chk hidden" id="shareRow"><span>Share this:</span></label>
             <input id="shareSession" class="seed-share hidden" type="text" readonly spellcheck="false">
@@ -221,6 +225,10 @@
     <p>One person is the <strong>Gamemaster</strong> and draws. Everyone else opens the
        <strong>Player</strong> tab, pastes the session, and their card follows along on its own.
        Join partway through and you'll catch up on everything called so far.</p>
+    <p>Hosting signs you in with Twitch, so the app knows which sessions are yours and nobody else
+       can advance your draws. It reads your channel name and nothing more &mdash; no scopes are
+       requested, nothing is posted, and the Twitch token is discarded straight after. <strong>Players
+       joining need no account at all.</strong></p>
     <p>If the connection drops, nothing is lost: the session alone determines every talisman, so
        the manual controls come back and you can keep playing off what the Gamemaster calls.</p>
 
@@ -314,6 +322,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

@@ -1109,6 +1109,24 @@
     try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (e) {}
   };
 
+  // Who the stored token says you are. For DISPLAY ONLY — the token is a signed {login, exp}
+  // blob and the Worker verifies the signature on every privileged call; nothing here trusts
+  // what this returns. Same approach MHGU Bingo uses.
+  function loggedInAs() {
+    const t = getToken();
+    if (!t) return null;
+    try {
+      const payload = JSON.parse(atob(t.split(".")[0].replace(/-/g, "+").replace(/_/g, "/")));
+      return payload.exp && payload.exp > Date.now() ? payload.login : null;
+    } catch (e) { return null; }
+  }
+
+  function signOut() {
+    setToken("");
+    if (live && live.mine) { live = null; stopPolling(); }
+    renderLive();
+  }
+
   // The Worker hands the session back in the URL FRAGMENT, which never reaches a server and
   // never lands in a Referer header. Same handoff MHGU Bingo uses, and the reason a GitHub
   // Pages app can authenticate against a workers.dev origin at all.
@@ -1201,7 +1219,17 @@
     // board where it was costing the card ~90px of height for a control used once.
     $("joinPanel").classList.toggle("hidden", mode !== "player");
 
+    // Sign-in state has to be visible. "Go live" doubles as the login entry point, and with
+    // no label saying so there was no way to tell the app used Twitch at all, let alone
+    // whether you were already signed in.
+    const who = loggedInAs();
+    $("twitchWho").classList.toggle("hidden", !who);
+    if (who) $("twitchWho").textContent = "Signed in to Twitch as " + who + ".";
+    $("twitchWhy").classList.toggle("hidden", !!who);
+    $("signOutBtn").classList.toggle("hidden", !who);
+
     const hosting = !!live && live.mine && !liveLost;
+    $("goLiveBtn").textContent = who ? "Go live" : "Sign in with Twitch to host";
     $("goLiveBtn").classList.toggle("hidden", hosting);
     $("endLiveBtn").classList.toggle("hidden", !hosting);
     $("shareRow").classList.toggle("hidden", !hosting);
@@ -1543,6 +1571,7 @@
       }
     });
     $("goLiveBtn").addEventListener("click", goLive);
+    $("signOutBtn").addEventListener("click", signOut);
     $("endLiveBtn").addEventListener("click", endLive);
     $("joinBtn").addEventListener("click", joinLive);
     $("joinSession").addEventListener("keydown", (e) => { if (e.key === "Enter") joinLive(); });
