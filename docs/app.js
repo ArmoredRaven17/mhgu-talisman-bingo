@@ -1381,9 +1381,18 @@
     if (!raw) return;
     try {
       const st = await api("/live/" + encodeURIComponent(raw));
-      // Joining rebuilds the card off the session, so the prune matches everyone else's and
-      // the player token is fresh — same session, own board.
-      if (!card || card.session !== st.session) {
+      // Joining a session gets you a NEW card: same session, so the same tree pool and the
+      // same talismans, but a fresh player token and therefore your own board. Everyone
+      // sharing a board would mean everyone calling BINGO on the same draw.
+      //
+      // The exception is reconnecting to the session you are already in — a reload, or
+      // reopening the link you are already playing. Reminting there would wipe every mark
+      // the player had made, which is worse than anything it fixes.
+      let remembered = null;
+      try { remembered = JSON.parse(localStorage.getItem(LIVE_KEY) || "null"); } catch (e) {}
+      const reconnecting = !!card && card.session === st.session
+        && !!remembered && remembered.session === st.session;
+      if (!reconnecting) {
         $("seedInput").value = st.session;
         applySeed(true);
       }
