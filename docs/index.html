@@ -8,7 +8,7 @@
 <meta name="description" content="A bingo card of talisman conditions — keep drawing charms until one fills the line you needed.">
 <link rel="icon" type="image/png" href="assets/TalismanIcons/icon_talisman_r10.png">
 <!-- Bump ?v= on any styles/app/data change so browsers fetch fresh copies (no hard-refresh needed) -->
-<link rel="stylesheet" href="styles.css?v=13">
+<link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
 <div id="app">
@@ -24,6 +24,9 @@
       <button id="seedApply" class="btn tiny">Load</button>
     </div>
     <button id="newCardBtn" class="icon-btn" title="New Card" aria-label="New Card">&#8635;</button>
+    <button id="twitchBtn" class="icon-btn" title="Twitch &amp; live sessions" aria-label="Twitch and live sessions">
+      <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="#9146FF" aria-hidden="true"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0Zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>
+    </button>
     <button id="linksBtn" class="icon-btn" title="Other MHGU apps" aria-label="Other MHGU apps">&#128279;</button>
     <button id="helpBtn" class="icon-btn" title="Help" aria-label="Help">?</button>
     <button id="themeBtn" class="icon-btn" title="Theme" aria-label="Theme">&#9881;</button>
@@ -137,11 +140,7 @@
           <p id="drawScore" class="hint"></p>
 
           <div class="live-box">
-            <p id="twitchWho" class="hint hidden"></p>
             <button id="goLiveBtn" class="btn tiny block">Go live</button>
-            <p id="twitchWhy" class="hint">Hosting a live session signs you in with Twitch. It only
-               reads your channel name &mdash; no scopes, nothing posted, nothing else stored.</p>
-            <button id="signOutBtn" class="btn tiny block hidden">Sign out of Twitch</button>
             <p id="gmLiveStatus" class="hint"></p>
             <label class="chk hidden" id="shareRow"><span>Share this:</span></label>
             <input id="shareSession" class="seed-share hidden" type="text" readonly spellcheck="false">
@@ -242,6 +241,38 @@
   </div>
 </div>
 
+<div id="twitchModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>Twitch &amp; live sessions</h2>
+    <p class="muted">Sign in to host a live session, so viewers' cards follow your draws
+       automatically. <strong>Joining needs no account</strong> &mdash; only hosting does.</p>
+
+    <div id="twitchLoggedOut">
+      <p class="hint">Signing in reads your Twitch channel name and nothing else. No scopes are
+         requested, nothing is posted, and the Twitch token is thrown away straight after.</p>
+      <div class="row gap"><button id="twitchLogin" class="btn accent">Log in with Twitch</button></div>
+    </div>
+
+    <div id="twitchLoggedIn" class="hidden">
+      <p class="hint">Logged in as <strong id="twitchLoginName"></strong>.</p>
+      <div class="row gap"><button id="twitchLogout" class="btn tiny">Log out</button></div>
+    </div>
+
+    <hr class="modal-divider">
+
+    <h3>A chat command so nobody types a seed</h3>
+    <p class="hint">While you are live, this returns a join link for whoever asks. A session seed is
+       25 characters with hyphens &mdash; not something chat should be retyping.</p>
+    <p class="hint">Nightbot:</p>
+    <pre class="cmd" id="cmdNightbot">!addcom !talisman $(urlfetch https://mhgu-bot-api.raven-mhgu.workers.dev/live-link?channel=$(channel))</pre>
+    <p class="hint">Or the plain URL, for bots that want it in their own fetch tag:</p>
+    <pre class="cmd" id="cmdUrl">https://mhgu-bot-api.raven-mhgu.workers.dev/live-link?channel=YOUR_CHANNEL</pre>
+    <p class="hint">Anyone clicking it lands on their own card, already following your draws.</p>
+
+    <div class="row end"><button id="twitchClose" class="btn">Close</button></div>
+  </div>
+</div>
+
 <div id="linksModal" class="modal hidden">
   <div class="modal-card">
     <h2>Other MHGU Apps</h2>
@@ -322,6 +353,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>

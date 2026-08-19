@@ -513,6 +513,12 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 
 /* Live-session controls. Deliberately quiet: going live is a thing you do once at the
    start of a stream, not a control you reach for during play. */
+/* Chat commands are meant to be copied verbatim, so they get to wrap rather than scroll. */
+.cmd{
+  background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:8px 10px;
+  font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0 10px;user-select:all;
+}
 .live-box{
   display:flex;flex-direction:column;gap:5px;margin-top:8px;
   padding:8px 9px;border:1px solid var(--line);border-radius:7px;background:var(--card);

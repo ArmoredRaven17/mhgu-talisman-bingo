@@ -1121,6 +1121,13 @@
     } catch (e) { return null; }
   }
 
+  function renderTwitch() {
+    const who = loggedInAs();
+    $("twitchLoggedOut").classList.toggle("hidden", !!who);
+    $("twitchLoggedIn").classList.toggle("hidden", !who);
+    if (who) $("twitchLoginName").textContent = who;
+  }
+
   function signOut() {
     setToken("");
     if (live && live.mine) { live = null; stopPolling(); }
@@ -1219,14 +1226,11 @@
     // board where it was costing the card ~90px of height for a control used once.
     $("joinPanel").classList.toggle("hidden", mode !== "player");
 
-    // Sign-in state has to be visible. "Go live" doubles as the login entry point, and with
-    // no label saying so there was no way to tell the app used Twitch at all, let alone
-    // whether you were already signed in.
+    // Sign-in lives in the header's Twitch modal, where the other apps put it. This button
+    // stays a game action: it still redirects to the login if you press it signed out, but it
+    // is no longer the only place the app admits Twitch is involved.
     const who = loggedInAs();
-    $("twitchWho").classList.toggle("hidden", !who);
-    if (who) $("twitchWho").textContent = "Signed in to Twitch as " + who + ".";
-    $("twitchWhy").classList.toggle("hidden", !!who);
-    $("signOutBtn").classList.toggle("hidden", !who);
+    renderTwitch();
 
     const hosting = !!live && live.mine && !liveLost;
     $("goLiveBtn").textContent = who ? "Go live" : "Sign in with Twitch to host";
@@ -1525,6 +1529,9 @@
     });
 
     captureTokenFromHash();
+    // ?session=... from the chat command's join link. Read before the card is restored so it
+    // wins over whatever was in localStorage — someone following a link means to join.
+    const urlSession = (new URLSearchParams(location.search).get("session") || "").trim().toUpperCase();
     loadSettings();
     buildCatRows();
     buildSwatches();
@@ -1571,7 +1578,10 @@
       }
     });
     $("goLiveBtn").addEventListener("click", goLive);
-    $("signOutBtn").addEventListener("click", signOut);
+    $("twitchLogin").addEventListener("click", () => {
+      location.href = BOT_API_ORIGIN + "/auth/login?return=talisman";
+    });
+    $("twitchLogout").addEventListener("click", signOut);
     $("endLiveBtn").addEventListener("click", endLive);
     $("joinBtn").addEventListener("click", joinLive);
     $("joinSession").addEventListener("keydown", (e) => { if (e.key === "Enter") joinLive(); });
@@ -1591,6 +1601,12 @@
     // After the card is restored or generated, so buildEntryForm can read card.keep.
     setMode(mode);
     renderLive();
+    if (urlSession) {
+      setMode("player");
+      $("joinSession").value = urlSession;
+      history.replaceState(null, "", location.pathname);
+      joinLive();
+    }
 
     $("seedApply").addEventListener("click", () => guard("Load that seed?", "Load", applySeed));
     $("seedInput").addEventListener("keydown", (e) => {
@@ -1617,6 +1633,10 @@
     wireModal("helpModal", "helpBtn", "helpClose");
     wireModal("linksModal", "linksBtn", "linksClose");
     wireModal("themeModal", "themeBtn", "themeClose");
+    wireModal("twitchModal", "twitchBtn", "twitchClose");
+    // Refresh on open: the modal can be opened long after the last renderLive(), and coming
+    // back from the Twitch redirect lands with a token the modal has never seen.
+    $("twitchBtn").addEventListener("click", renderTwitch);
     wireModal("confirmModal", null, null);
 
     const grid = $("bingoCard");
