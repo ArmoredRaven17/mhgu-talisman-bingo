@@ -521,6 +521,22 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
   font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0 10px;user-select:all;
 }
+/* A live session should be obvious at a glance, from the header, without opening anything. */
+.live-dot{
+  display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff4d4d;
+  box-shadow:0 0 6px 1px rgba(255,77,77,.8);
+}
+.icon-btn .live-dot{position:absolute;top:4px;right:4px}
+#twitchBtn{position:relative}
+.live-banner{
+  display:flex;align-items:center;gap:7px;margin:6px 0 4px;
+  font-size:13px;letter-spacing:.06em;color:var(--text);
+}
+@media (prefers-reduced-motion:no-preference){
+  .live-dot{animation:livePulse 2s ease-in-out infinite}
+}
+@keyframes livePulse{50%{opacity:.45}}
+
 .live-box{
   display:flex;flex-direction:column;gap:5px;margin-top:8px;
   padding:8px 9px;border:1px solid var(--line);border-radius:7px;background:var(--card);

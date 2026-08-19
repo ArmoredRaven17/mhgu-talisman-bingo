@@ -8,7 +8,7 @@
 <meta name="description" content="A bingo card of talisman conditions — keep drawing charms until one fills the line you needed.">
 <link rel="icon" type="image/png" href="assets/TalismanIcons/icon_talisman_r10.png">
 <!-- Bump ?v= on any styles/app/data change so browsers fetch fresh copies (no hard-refresh needed) -->
-<link rel="stylesheet" href="styles.css?v=16">
+<link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
 <div id="app">
@@ -25,6 +25,7 @@
     </div>
     <button id="newCardBtn" class="icon-btn" title="New Card" aria-label="New Card">&#8635;</button>
     <button id="twitchBtn" class="icon-btn" title="Twitch &amp; live sessions" aria-label="Twitch and live sessions">
+      <span id="liveDot" class="live-dot hidden" aria-hidden="true"></span>
       <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="#9146FF" aria-hidden="true"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0Zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>
     </button>
     <button id="linksBtn" class="icon-btn" title="Other MHGU apps" aria-label="Other MHGU apps">&#128279;</button>
@@ -253,7 +254,9 @@
     </div>
 
     <div id="liveRunning" class="hidden">
-      <p class="hint">Live. Viewers who join follow your draws — keep drawing from the
+      <p class="live-banner"><span class="live-dot"></span><strong>LIVE</strong>
+         &mdash; <span id="liveDrawCount">draw 0</span></p>
+      <p class="hint">Viewers who join follow your draws. Keep drawing from the
          <strong>Gamemaster</strong> tab.</p>
       <label class="field">
         <span class="hint">Session</span>
@@ -370,6 +373,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=26"></script>
+<script src="app.js?v=27"></script>
 </body>
 </html>

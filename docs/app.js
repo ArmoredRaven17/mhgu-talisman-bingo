@@ -1142,7 +1142,17 @@
     const hosting = !!live && live.mine;
     $("liveIdle").classList.toggle("hidden", hosting);
     $("liveRunning").classList.toggle("hidden", !hosting);
-    if (hosting) $("liveSessionOut").value = live.session;
+    if (hosting) {
+      $("liveSessionOut").value = live.session;
+      // The draw count makes it visibly alive rather than merely claiming to be. A static
+      // "Live" tells you nothing about whether it is still working.
+      $("liveDrawCount").textContent = "draw " + (live.n | 0);
+    }
+    // On the header button too: whether a session is running should not require opening a
+    // modal to discover.
+    $("liveDot").classList.toggle("hidden", !live);
+    $("twitchBtn").title = !live ? "Twitch & live sessions"
+      : (live.mine ? "LIVE — hosting a session" : "Following a live session");
     // Signing in is part of starting, not a prerequisite to be enforced up front — pressing
     // this signed out sends you to Twitch and you come back ready to go.
     $("liveIdleHint").textContent = who
@@ -1224,6 +1234,7 @@
         live.n = st.n; live.ended = !!st.ended;
         syncTo(st.n);
       }
+      renderTwitch();
       if (liveLost) { liveLost = false; renderLive(); }
       if (live.ended) { liveNote("joinStatus", "The Gamemaster ended the session."); stopPolling(); }
       else if (!liveLost && !live.mine) liveNote("joinStatus", "Following the Gamemaster — draw " + live.n + ".");
