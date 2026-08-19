@@ -1184,9 +1184,10 @@
   // Pages app can authenticate against a workers.dev origin at all.
   function captureTokenFromHash() {
     const m = (location.hash || "").match(/[#&]mhgu_bot_token=([^&]+)/);
-    if (!m) return;
+    if (!m) return false;
     setToken(decodeURIComponent(m[1]));
     history.replaceState(null, "", location.pathname + location.search);
+    return true;
   }
 
   async function api(path, opts) {
@@ -1630,7 +1631,7 @@
       });
     });
 
-    captureTokenFromHash();
+    const justLoggedIn = captureTokenFromHash();
     // ?session=... from the chat command's join link. Read before the card is restored so it
     // wins over whatever was in localStorage — someone following a link means to join.
     const urlSession = (new URLSearchParams(location.search).get("session") || "").trim().toUpperCase();
@@ -1759,6 +1760,14 @@
     // running it earlier in boot (where setMode and renderLive sit) always bailed on !card and
     // silently dropped every reloading viewer out of their session.
     restoreLive();
+    // Coming back from Twitch drops you on a normal page load with the modal shut, which is
+    // the middle of a job you started -- signing in is only ever a step towards hosting. Put
+    // you back where you were, signed in, with Start ready.
+    if (justLoggedIn) {
+      renderTwitch();
+      $("twitchModal").classList.remove("hidden");
+      liveNote("liveStartStatus", "Signed in. You can start your session now.");
+    }
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
