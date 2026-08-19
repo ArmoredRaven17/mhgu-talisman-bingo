@@ -1193,8 +1193,10 @@
     // spoiler, since they could run ahead of what has actually been called.
     $("peNext").classList.toggle("hidden", following);
     $("peManualHint").classList.toggle("hidden", following);
-    const manual = document.querySelector(".pe-manual");
-    if (manual) manual.classList.toggle("hidden", following);
+    // Manual entry lives in the sidebar so six dropdowns don't squeeze the board. It is for
+    // players only, and pointless while a session is feeding draws in automatically.
+    $("manualPanel").classList.toggle("hidden", mode !== "player" || following);
+    $("peManualPointer").classList.toggle("hidden", following);
 
     const hosting = !!live && live.mine && !liveLost;
     $("goLiveBtn").classList.toggle("hidden", hosting);
@@ -1345,6 +1347,7 @@
     $("playerPanel").classList.toggle("hidden", mode !== "player");
     $("logTitle").textContent = mode === "player" ? "Talismans logged" : "Recent draws";
     if (mode === "player") buildEntryForm();
+    renderLive();
     saveSettings();
     if (card) renderCard();
   }
