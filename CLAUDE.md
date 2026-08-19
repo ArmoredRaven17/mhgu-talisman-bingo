@@ -32,16 +32,50 @@ GitHub Pages caches assets by full URL. Every time you change `styles.css`, `app
 `data.js`, you **must** increment the `?v=N` query string on its tag in `index.html`. Without this,
 users keep the stale copy until they hard-refresh.
 
-## The draw stream is deliberately NOT seeded
+## Sessions: shared prune, shared draws, different cards
 
-The seeded RNG lays out the **card**. `drawOnce()` uses `Math.random()` and always will.
+A seed is in two halves:
 
-If the draws were derived from the card seed, everyone on a given seed would get a byte-identical
-game and "fewest draws" would have exactly one possible answer. The card is the reproducible part;
-the luck is not. Don't "fix" this by threading the seed into the roller.
+```
+MHGU-5F-N4P3S1R2C3-EYBKVK-DCK0-HMGF
+\_________ session ________/ \pl/ p/
+```
 
-This matters more now that one person calls for a table: the caller's stream is the only stream,
-and it has to be a fresh roll every session, not a replay of the seed.
+Three streams come off it, and which half feeds which is the whole design:
+
+| Stream | Seeded from | Shared? |
+|---|---|---|
+| Pruned tree pool | session | yes — everyone draws the same universe |
+| Talisman *n* | session + `\|d` + n | yes — draw 12 is the same on every device |
+| Card layout | session + `\|p` + player | **no** — one board per player |
+
+**The draw stream used to be deliberately unseeded, and that reversed.** The old rule said a
+seeded stream would make everyone on a seed play a byte-identical game with one possible answer to
+"fewest draws". That was written for one player, auto-marking, scored on draw count — all three are
+now false, so the objection expired with them.
+
+What replaced it is the reason sessions work with **no server**: `drawAt(n)` is a pure function of
+the session and the draw number, so every seat generates the same talismans locally. The only state
+a table must agree on is which number they are on, which the Gamemaster says out loud.
+
+Seeded **per draw**, not from one advancing stream. A running stream would have to be replayed from
+zero to reach draw 12 after a reload, and would desync permanently the moment anyone removed a log
+entry. `drawAt(12)` is just `drawAt(12)`.
+
+**Cards must differ per player.** Shared calls plus an identical card is not a fast game, it is no
+game: every player marks in lockstep and calls BINGO on the same draw. Hence the player token.
+
+Sharing therefore has two distinct actions, and confusing them breaks a game:
+- **Copy session** — what a Gamemaster hands out. Same pool, same draws, everyone rolls their own card.
+- **Copy card** — the full seed, which reproduces one exact board. For showing someone your card.
+
+Pasting a session with no player part is a **join**: the app mints a fresh player token rather than
+handing you whichever board the session came from.
+
+`ROLL.table(keep).draw(weights, rnd)` takes the RNG. `rndOf` accepts a bare function or app.js's
+`{next, rand}` wrapper — and note **it falls back to `Math.random` rather than throwing**. That is
+deliberate for the solo case but it is a trap: passing the wrong shape yields a perfectly plausible
+talisman while every seat silently draws a different stream. It shipped that way once.
 
 ## Regenerating data
 

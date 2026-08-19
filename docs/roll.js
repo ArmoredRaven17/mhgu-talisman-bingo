@@ -39,17 +39,30 @@ window.TB_ROLL = (function () {
 
   const SECOND_SKILL_CHANCE = 0.5;
 
-  const ri = (n) => Math.floor(Math.random() * n);
-  const between = (lo, hi) => lo + ri(hi - lo + 1);
+  // Every random decision in a roll routes through an injected `rnd`. It defaults to
+  // Math.random, which is what a lone player gets; a shared session passes a seeded function
+  // instead so that draw N is the same talisman on every device at the table.
+  // Accepts a bare () => float OR app.js's { next, rand } wrapper. Taking both matters more
+  // than it looks: an unrecognised value here does not throw, it silently falls back to
+  // Math.random and yields a perfectly plausible talisman -- which is exactly how a shared
+  // session can look like it works while every seat draws a different stream.
+  const rndOf = (r) => (typeof r === "function" ? r
+    : (r && typeof r.next === "function" ? r.next : Math.random));
+  const riR = (rnd, n) => Math.floor(rnd() * n);
+  const betweenR = (rnd, lo, hi) => lo + riR(rnd, hi - lo + 1);
 
-  function pickWeighted(pairs) {
+  const ri = (n) => riR(Math.random, n);
+  const between = (lo, hi) => betweenR(Math.random, lo, hi);
+
+  function pickWeightedR(rnd, pairs) {
     let total = 0;
     for (const p of pairs) total += p[1];
     if (total <= 0) return null;
-    let n = Math.random() * total;
+    let n = rnd() * total;
     for (const p of pairs) { n -= p[1]; if (n < 0) return p[0]; }
     return pairs[pairs.length - 1][0];
   }
+  const pickWeighted = (pairs) => pickWeightedR(Math.random, pairs);
 
   const tierOf = (rarity) => TAL_TIER[rarity] || null;
   const tierIndex = (rarity) => TIER_ORDER.indexOf(tierOf(rarity));
@@ -79,13 +92,14 @@ window.TB_ROLL = (function () {
   }
 
   // Slot count legal for this rarity's tier, honouring SLOT_TIER_FLOOR.
-  function rollSlots(rarity) {
+  function rollSlotsR(rnd, rarity) {
     const ti = tierIndex(rarity);
     const pairs = [];
     for (let s = 0; s <= 3; s++) if (ti >= SLOT_TIER_FLOOR[s]) pairs.push([s, SLOT_WEIGHTS[s]]);
-    const s = pickWeighted(pairs);
+    const s = pickWeightedR(rndOf(rnd), pairs);
     return s === null ? 0 : s;
   }
+  const rollSlots = (rarity) => rollSlotsR(Math.random, rarity);
 
   // Roll one charm of a given rarity. Always produces a legal charm — verify() below is the
   // assertion that says so, and scripts/test-roll.mjs hammers it.
@@ -94,15 +108,16 @@ window.TB_ROLL = (function () {
   // filtered equivalent. Everything downstream — the 1/n picks, the second-skill gate, the
   // same-tree exclusion — is identical either way, which is what makes a pruned roll a real
   // roll on a smaller table rather than a different algorithm.
-  function rollCharmWith(treesFn, rarity) {
+  function rollCharmWith(treesFn, rarity, rnd) {
+    rnd = rndOf(rnd);
     const tier = tierOf(rarity);
     if (!tier) return null;
 
     const first = treesFn(tier, 1);
     if (!first.length) return null;
-    const pick1 = first[ri(first.length)];
+    const pick1 = first[riR(rnd, first.length)];
     const t1 = pick1[0], r1 = pick1[1];
-    const k = [[t1, between(r1[0], r1[1])]];
+    const k = [[t1, betweenR(rnd, r1[0], r1[1])]];
 
     // Roughly half of charms carry a second skill. It must be a different tree — the game
     // never rolls the same tree twice on one charm. Negative points are kept: a big first
@@ -110,12 +125,12 @@ window.TB_ROLL = (function () {
     //
     // Note that no mystery row has a positive second half, so a mystery charm is single-
     // skilled in practice. That is why a two-condition tile is unreachable from that tier.
-    if (Math.random() < SECOND_SKILL_CHANCE) {
+    if (rnd() < SECOND_SKILL_CHANCE) {
       const second = treesFn(tier, 2).filter((e) => e[0] !== t1);
       if (second.length) {
-        const pick2 = second[ri(second.length)];
+        const pick2 = second[riR(rnd, second.length)];
         const t2 = pick2[0], r2 = pick2[1];
-        const pts = between(r2[0], r2[1]);
+        const pts = betweenR(rnd, r2[0], r2[1]);
         // Most second-skill ranges straddle zero, so a roll of exactly 0 is common. A charm
         // with a 0-point skill is the same charm as one with no second skill at all — the
         // game would just show one skill — so drop it rather than print "Insight 0".
@@ -123,10 +138,10 @@ window.TB_ROLL = (function () {
       }
     }
 
-    return { r: rarity, s: rollSlots(rarity), k: k };
+    return { r: rarity, s: rollSlotsR(rnd, rarity), k: k };
   }
 
-  const rollCharm = (rarity) => rollCharmWith(legalTrees, rarity);
+  const rollCharm = (rarity) => rollCharmWith(legalTrees, rarity, Math.random);
 
   // A pruned view of the tables. `keepIds` restricts which trees may roll at all; null gives
   // the full tables back. Pruning is the only thing that makes a two-skill tile reachable:
@@ -147,18 +162,22 @@ window.TB_ROLL = (function () {
     return {
       keep: keep,
       legalTrees: trees,
-      rollCharm: (rarity) => rollCharmWith(trees, rarity),
-      draw: function (tierWeights) {
-        const tier = pickWeighted(tierWeights);
-        return tier ? rollCharmWith(trees, rollRarity(tier)) : null;
+      rollCharm: (rarity, rnd) => rollCharmWith(trees, rarity, rnd),
+      // `rnd` makes the whole draw reproducible: tier, rarity, trees, points and slots all
+      // come off the one stream, so the same rnd yields the same talisman everywhere.
+      draw: function (tierWeights, rnd) {
+        const r = rndOf(rnd);
+        const tier = pickWeightedR(r, tierWeights);
+        return tier ? rollCharmWith(trees, rollRarityR(r, tier), r) : null;
       },
     };
   }
 
-  function rollRarity(tier) {
+  function rollRarityR(rnd, tier) {
     const rs = TIER_RARITIES[tier];
-    return rs ? rs[ri(rs.length)] : 1;
+    return rs ? rs[riR(rndOf(rnd), rs.length)] : 1;
   }
+  const rollRarity = (tier) => rollRarityR(Math.random, tier);
 
   // Roll a tier from [name, weight] pairs, then a charm from it. This is the app's whole
   // draw: the tier weights are the user's difficulty control.

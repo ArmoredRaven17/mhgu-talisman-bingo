@@ -8,7 +8,7 @@
 <meta name="description" content="A bingo card of talisman conditions — keep drawing charms until one fills the line you needed.">
 <link rel="icon" type="image/png" href="assets/TalismanIcons/icon_talisman_r10.png">
 <!-- Bump ?v= on any styles/app/data change so browsers fetch fresh copies (no hard-refresh needed) -->
-<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 <div id="app">
@@ -19,7 +19,8 @@
     <div class="seedbar">
       <input id="seedInput" type="text" spellcheck="false" autocomplete="off" placeholder="Seed — paste one to rebuild that card">
       <span id="seedModified" class="seed-modified hidden" title="This card was rerolled, so the seed no longer rebuilds it">edited</span>
-      <button id="seedCopy" class="btn tiny">Copy</button>
+      <button id="sessionCopy" class="btn tiny">Copy session</button>
+      <button id="seedCopy" class="btn tiny">Copy card</button>
       <button id="seedApply" class="btn tiny">Load</button>
     </div>
     <button id="newCardBtn" class="icon-btn" title="New Card" aria-label="New Card">&#8635;</button>
@@ -104,8 +105,14 @@
         </div>
 
         <div class="draw-controls player-entry hidden" id="playerPanel" role="tabpanel" aria-labelledby="tabPlayer">
-          <p class="hint">Log the talisman the Gamemaster called, and your card will light up
-             the squares it satisfies.</p>
+          <button id="peNext" class="btn accent block">Next Talisman</button>
+          <p class="draw-count">Talismans seen: <strong id="peCount">0</strong></p>
+          <p class="hint">Everyone in a session draws the same talismans in the same order, so
+             press this once each time the Gamemaster calls one. Stay on their number.</p>
+          <details class="pe-manual">
+            <summary>Enter one by hand</summary>
+            <p class="hint">Only needed if you've lost your place, or the Gamemaster is calling
+               from the game rather than from here.</p>
           <label class="pe-row"><span>Talisman</span>
             <select id="peRarity" class="sel"></select></label>
           <label class="pe-row"><span>Skill 1</span>
@@ -118,7 +125,8 @@
             <select id="pePts2" class="sel"></select></label>
           <label class="pe-row"><span>Slots</span>
             <select id="peSlots" class="sel"></select></label>
-          <button id="peAdd" class="btn accent block">Add Talisman</button>
+          <button id="peAdd" class="btn block">Add Talisman</button>
+          </details>
           <p id="peNote" class="hint"></p>
         </div>
         <div id="lastCharm" class="last-charm"></div>
@@ -272,8 +280,8 @@
 <div id="tilePreview" class="tile-preview"></div>
 
 <script src="data.js?v=4"></script>
-<script src="roll.js?v=2"></script>
+<script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>

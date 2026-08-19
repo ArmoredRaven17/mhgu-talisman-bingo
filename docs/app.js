@@ -196,13 +196,25 @@
   const b32 = (n, len) => { let s = ""; for (let i = 0; i < len; i++) { s = B32[n & 31] + s; n = n >>> 5; } return s; };
   const CAT_LETTER = { name: "N", pts: "P", slot: "S", rar: "R", combo: "C" };
   const LETTER_CAT = Object.fromEntries(Object.entries(CAT_LETTER).map(([k, v]) => [v, k]));
-  const SEED_RE = /^MHGU-([3-9]|10)([FN])-((?:[NPSRC][1-9])+)-([0-9A-Z]{6})-([0-9A-Z]{4})$/;
+  // MHGU-{size}{F|N}-{pools}-{session}[-{player}][-{fp}]
+  //
+  // The seed splits in two. Everything up to and including {session} is the SESSION: it fixes
+  // the pruned tree pool AND the draw stream, so every seat at the table draws the same
+  // talismans out of the same universe. {player} picks the card layout on top of that.
+  //
+  // That split is the whole point. Share only the session and each player rolls their own
+  // board off it; share the full seed and you hand someone your exact card. Identical cards
+  // plus a shared stream would mean every player marking in lockstep and calling BINGO on the
+  // same draw, which is not a game.
+  const SEED_RE = /^MHGU-([3-9]|10)([FN])-((?:[NPSRC][1-9])+)-([0-9A-Z]{6})(?:-([0-9A-Z]{4}))?(?:-([0-9A-Z]{4}))?$/;
 
   // The one place Math.random is allowed for the card. Everything downstream is seeded.
   const newToken = () => b32(Math.floor(Math.random() * 0x100000000), 6);
+  const newPlayer = () => b32(Math.floor(Math.random() * 0x100000000), 4);
 
   const effFree = (c) => !!c.free && c.size % 2 === 1;
 
+  // The session half, and the only thing a Gamemaster needs to hand out.
   function seedBody(c, token) {
     const cats = CATS.filter((x) => (c.cats[x.id] | 0) > 0)
       .map((x) => CAT_LETTER[x.id] + c.cats[x.id]).join("");
@@ -222,11 +234,13 @@
     const m = SEED_RE.exec(s);
     // Anything unparseable still produces a card: hash it into a token so typing a word
     // gives you a reproducible board rather than an error.
-    if (!m) return { cfg: null, token: b32(hashStr(s), 6), fp: null };
+    if (!m) return { cfg: null, token: b32(hashStr(s), 6), player: null, fp: null };
     const cfg = { size: parseInt(m[1], 10), free: m[2] === "F", cats: {} };
     for (const c of CATS) cfg.cats[c.id] = 0;
     m[3].replace(/([NPSRC])([1-9])/g, (_, L, n) => { cfg.cats[LETTER_CAT[L]] = parseInt(n, 10); return ""; });
-    return { cfg: cfg, token: m[4], fp: m[5] };
+    // No player part means someone pasted a session: they are JOINING, so mint them a card of
+    // their own rather than handing them whoever's board the session came from.
+    return { cfg: cfg, token: m[4], player: m[5] || null, fp: m[6] || null };
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -314,22 +328,23 @@
     return { cells: cells, freeIdx: freeIdx, need: need, filled: drawn.length, bags: softBags, used: used };
   }
 
-  function generate(token) {
+  function generate(token, player) {
     const body = seedBody(cfg, token);
+    player = player || newPlayer();
     const fp = b32(hashStr(fingerprint()), 4);
-    // Seeded from the body only, exactly as MHGU Bingo does — the fingerprint is advisory
-    // and drives the "different settings" banner, never the layout.
-    const rng = makeRng(body);
-    // The keep-set comes off the SAME stream that lays out the squares, and before it, so it
-    // never has to ride in the seed string: replay the seed and you replay the tree pool.
-    const keep = GOALS.keepFor(rng, KEEP_N);
+    // THREE streams, all derived from the seed and deliberately independent:
+    //   session          -> the pruned tree pool. Shared, so everyone draws the same universe.
+    //   session + player -> this card's squares. Per player, so nobody shares a board.
+    //   session + draw n -> the nth talisman (see drawAt). Shared, so calls match.
+    const keep = GOALS.keepFor(makeRng(body), KEEP_N);
     const pools = buildPools(keep);
     view = pools.view;
-    const built = buildCells(rng, cfg, pools);
+    const built = buildCells(makeRng(body + "|p" + player), cfg, pools);
     bags = built.bags;
     usedKeys = built.used;
     card = {
-      seed: body + "-" + fp, token: token, fp: fp, keep: keep,
+      seed: body + "-" + player + "-" + fp, token: token, player: player,
+      session: body, fp: fp, keep: keep,
       cfg: JSON.parse(JSON.stringify(cfg)),
       modified: false, freeIdx: built.freeIdx, cells: built.cells,
       marked: new Set(built.freeIdx >= 0 ? [built.freeIdx] : []), eligible: [],
@@ -412,9 +427,22 @@
     return { charm: charm, hits: hint };
   }
 
+  // Talisman N of the session. Seeded PER DRAW rather than from one running stream, so it is
+  // reproducible without replaying: reload, undo a draw, or join late and draw 12 is still
+  // draw 12. A single advancing stream would have to be replayed from zero to stay in sync,
+  // and would desync permanently the moment anyone removed an entry.
+  //
+  // This is what makes a shared session work with no server at all. The only state the table
+  // has to agree on is which number they're on, which a Gamemaster can simply say out loud.
+  function drawAt(n) {
+    if (!card) return null;
+    const table = view || ROLL.table(card.keep);
+    return table.draw(TIER_PAIRS, makeRng((card.session || card.seed) + "|d" + n));
+  }
+
   function drawOnce() {
     if (!card || isComplete()) return null;
-    const charm = (view || ROLL.table(card.keep)).draw(TIER_PAIRS);
+    const charm = drawAt(card.draws + 1);
     return charm ? applyCharm(charm, false) : null;
   }
 
@@ -476,9 +504,10 @@
   const isComplete = () => !!card && card.marked.size >= totalCells() && totalCells() > 0;
 
   function doDraw() {
-    if (!drawOnce()) return;
+    if (!drawOnce()) return false;
     renderCard();
     saveCard();
+    return true;
   }
 
   // ── Rendering ──────────────────────────────────────────────────────────────
@@ -705,12 +734,18 @@
 
     $("drawBtn").disabled = isComplete();
     $("peAdd").disabled = isComplete();
+    $("peNext").disabled = isComplete();
+    $("peCount").textContent = String(card.draws);
   }
 
   function updateSeedBar() {
     if (!card) return;
     $("seedInput").value = card.seed;
     $("seedModified").classList.toggle("hidden", !card.modified);
+    // Copying the SESSION is the normal sharing action, not copying the seed: the full seed
+    // ends in this player's card token, so handing it out gives everyone your exact board.
+    const sc = $("sessionCopy");
+    if (sc) sc.title = "Copy the session (" + (card.session || "") + ") — same draws, own card";
   }
 
   function updateBanner() {
@@ -1221,7 +1256,7 @@
     syncFreeSpace();
     saveSettings();
     refreshCounts();
-    generate(newToken());
+    generate(newToken(), newPlayer());
   }
 
   // ── Wiring ─────────────────────────────────────────────────────────────────
@@ -1243,6 +1278,7 @@
 
   function applySeed() {
     const d = decodeSeed($("seedInput").value);
+    const joining = d.cfg && !d.player;
     if (d.cfg && CATS.some((c) => (d.cfg.cats[c.id] | 0) > 0)) {
       cfg = d.cfg;
       $("gridSize").value = String(cfg.size);
@@ -1251,7 +1287,13 @@
       saveSettings();
       refreshCounts();
     }
-    generate(d.token);
+    generate(d.token, d.player);
+    if (joining) {
+      const b = $("banner");
+      b.textContent = "Joined the session — same tree pool and the same draws as everyone else, "
+        + "but this card is yours alone.";
+      b.classList.remove("hidden");
+    }
   }
 
   function boot() {
@@ -1289,7 +1331,7 @@
       previewMin = parseInt($("previewMin").value, 10); saveSettings(); hidePreview();
     });
 
-    const newCard = () => guard("New card?", "New card", () => generate(newToken()));
+    const newCard = () => guard("New card?", "New card", () => generate(newToken(), newPlayer()));
     $("generateBtn").addEventListener("click", newCard);
     $("newCardBtn").addEventListener("click", newCard);
     $("resetBtn").addEventListener("click", () => guard("Reset everything?", "Reset", doReset));
@@ -1300,6 +1342,14 @@
     $("peSkill1").addEventListener("change", syncEntry);
     $("peSkill2").addEventListener("change", syncEntry);
     $("peAdd").addEventListener("click", addTypedCharm);
+    $("peNext").addEventListener("click", () => {
+      // Identical to the Gamemaster's Draw: drawAt(n) is a pure function of the session and
+      // the number, so following along produces the same talisman rather than a parallel one.
+      if (!doDraw()) return;
+      $("peNote").textContent = card.last && card.last.hits
+        ? card.last.hits + (card.last.hits === 1 ? " square lights up" : " squares light up")
+        : "Nothing on your card matches it";
+    });
     // After the card is restored or generated, so buildEntryForm can read card.keep.
     setMode(mode);
 
@@ -1307,16 +1357,21 @@
     $("seedInput").addEventListener("keydown", (e) => {
       if (e.key === "Enter") guard("Load that seed?", "Load", applySeed);
     });
-    $("seedCopy").addEventListener("click", () => {
-      const v = $("seedInput").value;
-      const done = () => {
-        const b = $("seedCopy");
-        b.textContent = "Copied";
-        setTimeout(() => { b.textContent = "Copy"; }, 1200);
-      };
-      if (navigator.clipboard) navigator.clipboard.writeText(v).then(done, done);
-      else { $("seedInput").select(); document.execCommand("copy"); done(); }
-    });
+    // Two things worth copying, and they are not interchangeable. The session is what a
+    // Gamemaster hands round — same tree pool, same draws, everyone rolls their own card. The
+    // full card seed reproduces one exact board, which is for showing someone your card, not
+    // for starting a game.
+    const copyTo = (btnId, label, getText) => {
+      $(btnId).addEventListener("click", () => {
+        const b = $(btnId);
+        const done = () => { b.textContent = "Copied"; setTimeout(() => { b.textContent = label; }, 1200); };
+        const v = getText();
+        if (navigator.clipboard) navigator.clipboard.writeText(v).then(done, done);
+        else { $("seedInput").select(); document.execCommand("copy"); done(); }
+      });
+    };
+    copyTo("seedCopy", "Copy card", () => $("seedInput").value);
+    copyTo("sessionCopy", "Copy session", () => (card && card.session) || $("seedInput").value);
 
     $("confirmOk").addEventListener("click", () => { const f = confirmFn; closeConfirm(); if (f) f(); });
     $("confirmCancel").addEventListener("click", closeConfirm);

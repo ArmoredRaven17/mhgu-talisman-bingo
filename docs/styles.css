@@ -512,6 +512,11 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 .modetab:focus-visible{outline:2px solid var(--cta);outline-offset:2px}
 
 .player-entry{display:flex;flex-direction:column;gap:6px}
+.pe-manual{border:1px solid var(--line);border-radius:7px;padding:6px 9px;background:var(--card)}
+.pe-manual summary{cursor:pointer;font-size:12.5px;opacity:.8;user-select:none}
+.pe-manual summary:hover{opacity:1}
+.pe-manual[open]{padding-bottom:9px}
+.pe-manual .pe-row{margin-top:5px}
 .pe-row{display:flex;align-items:center;gap:8px;font-size:12.5px}
 .pe-row>span{flex:0 0 62px;opacity:.75}
 /* Matches .field select, which is what every other dropdown on the page uses. */
