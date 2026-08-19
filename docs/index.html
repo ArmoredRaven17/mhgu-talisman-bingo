@@ -84,17 +84,6 @@
       </section>
 
 
-      <section class="panel hidden" id="joinPanel" data-open="true">
-        <button class="panel-head">Join a session <span class="chev">&#9662;</span></button>
-        <div class="panel-body">
-          <p class="hint">Paste the session the Gamemaster shared. Your card will follow their
-             draws on its own, and catch up on anything already called.</p>
-          <input id="joinSession" type="text" spellcheck="false" autocomplete="off"
-                 placeholder="MHGU-5F-N4P3S1R2C3-EYBKVK">
-          <button id="joinBtn" class="btn block">Join live session</button>
-          <p id="joinStatus" class="hint"></p>
-        </div>
-      </section>
 
       <section class="panel hidden" id="manualPanel" data-open="false">
         <button class="panel-head">Enter a talisman <span class="chev">&#9662;</span></button>
@@ -278,6 +267,18 @@
 
     <hr class="modal-divider">
 
+    <h3>Join someone else's session</h3>
+    <p class="hint">Paste the session the Gamemaster shared. You get your own card, it follows
+       their draws, and it catches up on anything already called. No account needed.</p>
+    <label class="field">
+      <input id="joinSession" type="text" spellcheck="false" autocomplete="off"
+             placeholder="MHGU-5F-N4P3S1R2C3-EYBKVK">
+    </label>
+    <div class="row gap"><button id="joinBtn" class="btn">Join session</button></div>
+    <p id="joinStatus" class="hint"></p>
+
+    <hr class="modal-divider">
+
     <h3>!talisman</h3>
     <p class="hint">This is the command for chat to join your live session.</p>
     <p class="cmd-desc">Nightbot</p>
@@ -369,6 +370,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=22"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>

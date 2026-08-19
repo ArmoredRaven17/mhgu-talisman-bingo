@@ -1242,9 +1242,6 @@
     // players only, and pointless while a session is feeding draws in automatically.
     $("manualPanel").classList.toggle("hidden", mode !== "player" || following);
     $("peManualPointer").classList.toggle("hidden", following);
-    // Joining is a player action and belongs beside the other setup controls, not under the
-    // board where it was costing the card ~90px of height for a control used once.
-    $("joinPanel").classList.toggle("hidden", mode !== "player");
 
     // Everything about starting, sharing and ending a session now lives in the header's
     // Twitch modal — the one place titled "live sessions". This panel only reports state,
@@ -1306,6 +1303,8 @@
       }
       live = { session: st.session, n: st.n | 0, ended: !!st.ended, owner: st.owner, mine: false };
       liveLost = false;
+      // You joined someone's game; put you where you play it rather than making you find the tab.
+      if (mode !== "player") setMode("player");
       const caught = syncTo(st.n);
       renderLive();
       liveNote("joinStatus", caught
