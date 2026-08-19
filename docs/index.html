@@ -140,11 +140,7 @@
           <p id="drawScore" class="hint"></p>
 
           <div class="live-box">
-            <button id="goLiveBtn" class="btn tiny block">Go live</button>
             <p id="gmLiveStatus" class="hint"></p>
-            <label class="chk hidden" id="shareRow"><span>Share this:</span></label>
-            <input id="shareSession" class="seed-share hidden" type="text" readonly spellcheck="false">
-            <button id="endLiveBtn" class="btn tiny block hidden">End session</button>
           </div>
         </div>
 
@@ -260,6 +256,28 @@
 
     <hr class="modal-divider">
 
+    <h3>Your live session</h3>
+    <div id="liveIdle">
+      <p class="hint" id="liveIdleHint">Start a session and every viewer who joins gets their own
+         card that follows your draws.</p>
+      <div class="row gap"><button id="startLiveBtn" class="btn accent">Start a live session</button></div>
+    </div>
+
+    <div id="liveRunning" class="hidden">
+      <p class="hint">Live. Viewers who join follow your draws — keep drawing from the
+         <strong>Gamemaster</strong> tab.</p>
+      <label class="field">
+        <span class="hint">Session</span>
+        <input id="liveSessionOut" type="text" readonly spellcheck="false">
+      </label>
+      <div class="row gap">
+        <button id="copyLiveSession" class="btn tiny">Copy session</button>
+        <button id="stopLiveBtn" class="btn tiny">End session</button>
+      </div>
+    </div>
+
+    <hr class="modal-divider">
+
     <h3>!talisman</h3>
     <p class="hint">This is the command for chat to join your live session.</p>
     <p class="cmd-desc">Nightbot</p>
@@ -351,6 +369,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=21"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>

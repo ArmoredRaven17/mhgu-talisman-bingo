@@ -1136,6 +1136,16 @@
     const url = BOT_API_ORIGIN + "/live-link?channel=";
     $("cmdNightbot").textContent = "$(urlfetch " + url + "$(channel))";
     $("cmdUrl").textContent = url + (who || "YOUR_CHANNEL");
+
+    const hosting = !!live && live.mine;
+    $("liveIdle").classList.toggle("hidden", hosting);
+    $("liveRunning").classList.toggle("hidden", !hosting);
+    if (hosting) $("liveSessionOut").value = live.session;
+    // Signing in is part of starting, not a prerequisite to be enforced up front — pressing
+    // this signed out sends you to Twitch and you come back ready to go.
+    $("liveIdleHint").textContent = who
+      ? "Start a session and every viewer who joins gets their own card that follows your draws."
+      : "Starting a session signs you in with Twitch first. Viewers who join need no account.";
   }
 
   function signOut() {
@@ -1236,25 +1246,19 @@
     // board where it was costing the card ~90px of height for a control used once.
     $("joinPanel").classList.toggle("hidden", mode !== "player");
 
-    // Sign-in lives in the header's Twitch modal, where the other apps put it. This button
-    // stays a game action: it still redirects to the login if you press it signed out, but it
-    // is no longer the only place the app admits Twitch is involved.
-    const who = loggedInAs();
+    // Everything about starting, sharing and ending a session now lives in the header's
+    // Twitch modal — the one place titled "live sessions". This panel only reports state,
+    // because a second copy of the control is how it ended up findable from neither.
     renderTwitch();
 
     const hosting = !!live && live.mine && !liveLost;
-    $("goLiveBtn").textContent = who ? "Go live" : "Sign in with Twitch to host";
-    $("goLiveBtn").classList.toggle("hidden", hosting);
-    $("endLiveBtn").classList.toggle("hidden", !hosting);
-    $("shareRow").classList.toggle("hidden", !hosting);
-    $("shareSession").classList.toggle("hidden", !hosting);
-    if (hosting) $("shareSession").value = live.session;
-
     if (liveLost) {
       liveNote("joinStatus", "Lost the session — keep playing off what the Gamemaster calls.", true);
       liveNote("gmLiveStatus", "Lost the connection — draws are local until it returns.", true);
     } else if (hosting) {
-      liveNote("gmLiveStatus", "Live. Viewers on this session follow your draws.");
+      liveNote("gmLiveStatus", "Live — viewers on this session follow your draws.");
+    } else {
+      liveNote("gmLiveStatus", "Not live. Start a session from the Twitch button at the top.");
     }
   }
 
@@ -1587,12 +1591,10 @@
         if (!liveLost) { liveLost = true; renderLive(); }
       }
     });
-    $("goLiveBtn").addEventListener("click", goLive);
     $("twitchLogin").addEventListener("click", () => {
       location.href = BOT_API_ORIGIN + "/auth/login?return=talisman";
     });
     $("twitchLogout").addEventListener("click", signOut);
-    $("endLiveBtn").addEventListener("click", endLive);
     $("joinBtn").addEventListener("click", joinLive);
     $("joinSession").addEventListener("keydown", (e) => { if (e.key === "Enter") joinLive(); });
     $("tabGm").addEventListener("click", () => setMode("gm"));
