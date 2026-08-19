@@ -8,7 +8,7 @@
 <meta name="description" content="A bingo card of talisman conditions — keep drawing charms until one fills the line you needed.">
 <link rel="icon" type="image/png" href="assets/TalismanIcons/icon_talisman_r10.png">
 <!-- Bump ?v= on any styles/app/data change so browsers fetch fresh copies (no hard-refresh needed) -->
-<link rel="stylesheet" href="styles.css?v=12">
+<link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
 <div id="app">
@@ -81,6 +81,18 @@
       </section>
 
 
+      <section class="panel hidden" id="joinPanel" data-open="true">
+        <button class="panel-head">Join a session <span class="chev">&#9662;</span></button>
+        <div class="panel-body">
+          <p class="hint">Paste the session the Gamemaster shared. Your card will follow their
+             draws on its own, and catch up on anything already called.</p>
+          <input id="joinSession" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="MHGU-5F-N4P3S1R2C3-EYBKVK">
+          <button id="joinBtn" class="btn block">Join live session</button>
+          <p id="joinStatus" class="hint"></p>
+        </div>
+      </section>
+
       <section class="panel hidden" id="manualPanel" data-open="false">
         <button class="panel-head">Enter a talisman <span class="chev">&#9662;</span></button>
         <div class="panel-body">
@@ -134,13 +146,6 @@
         </div>
 
         <div class="draw-controls player-entry hidden" id="playerPanel" role="tabpanel" aria-labelledby="tabPlayer">
-          <div class="live-box">
-            <input id="joinSession" type="text" spellcheck="false" autocomplete="off"
-                   placeholder="Session from the Gamemaster">
-            <button id="joinBtn" class="btn tiny block">Join live session</button>
-            <p id="joinStatus" class="hint"></p>
-          </div>
-
           <button id="peNext" class="btn accent block">Next Talisman</button>
           <p class="draw-count">Talismans seen: <strong id="peCount">0</strong></p>
           <p class="hint" id="peManualHint">Everyone in a session draws the same talismans in the
@@ -309,6 +314,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

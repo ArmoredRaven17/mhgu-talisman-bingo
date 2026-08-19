@@ -517,6 +517,10 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
   display:flex;flex-direction:column;gap:5px;margin-top:8px;
   padding:8px 9px;border:1px solid var(--line);border-radius:7px;background:var(--card);
 }
+.panel-body input[type="text"]{
+  width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--line);
+  border-radius:6px;padding:6px 8px;font-size:12.5px;min-width:0;
+}
 .live-box input{
   background:var(--bg2);color:var(--text);border:1px solid var(--line);
   border-radius:6px;padding:6px 8px;font-size:12.5px;min-width:0;
