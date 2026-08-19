@@ -351,9 +351,22 @@
       created: Date.now(), need: built.need, short: built.need - built.filled,
       draws: 0, firstBingoDraw: null, blackoutDraw: null, log: [], last: null,
     };
+    // A new card is a new session. Anything live was tied to the OLD one, so keep going and
+    // the modal shows a session you are no longer on, while draws post to a session whose
+    // talismans no longer match the board in front of you.
+    if (live && live.session !== card.session) {
+      const wasHosting = live.mine;
+      live = null;
+      stopPolling();
+      rememberLive();
+      liveNote(wasHosting ? "gmLiveStatus" : "joinStatus",
+        wasHosting ? "New card — the old session ended here. Start a new one when ready."
+                   : "New card — you have left that session.");
+    }
     if (mode === "player") buildEntryForm();
     renderCard();
     saveCard();
+    renderTwitch();
   }
 
   function rerollCell(i) {
@@ -1339,8 +1352,8 @@
     liveNote("gmLiveStatus", "Session ended.");
   }
 
-  async function joinLive() {
-    const raw = ($("joinSession").value || "").trim().toUpperCase();
+  async function joinLive(sessionArg) {
+    const raw = String(sessionArg || "").trim().toUpperCase();
     if (!raw) return;
     try {
       const st = await api("/live/" + encodeURIComponent(raw));
@@ -1348,7 +1361,7 @@
       // the player token is fresh — same session, own board.
       if (!card || card.session !== st.session) {
         $("seedInput").value = st.session;
-        applySeed();
+        applySeed(true);
       }
       live = { session: st.session, n: st.n | 0, ended: !!st.ended, owner: st.owner, mine: false };
       liveLost = false;
@@ -1564,7 +1577,7 @@
     box.parentElement.classList.toggle("disabled", !odd);
   }
 
-  function applySeed() {
+  function applySeed(fromJoin) {
     const d = decodeSeed($("seedInput").value);
     const joining = d.cfg && !d.player;
     if (d.cfg && CATS.some((c) => (d.cfg.cats[c.id] | 0) > 0)) {
@@ -1576,6 +1589,12 @@
       refreshCounts();
     }
     generate(d.token, d.player);
+    // A session-only seed means "put me in this game", so connect as well as rebuild. Without
+    // this, Load and the modal's Join did almost the same thing and only one of them worked.
+    if (joining && !fromJoin) {
+      const s = card && card.session;
+      if (s) joinLive(s);
+    }
     if (joining) {
       const b = $("banner");
       b.textContent = "Joined the session — same tree pool and the same draws as everyone else, "
@@ -1647,8 +1666,6 @@
       location.href = BOT_API_ORIGIN + "/auth/login?return=talisman";
     });
     $("twitchLogout").addEventListener("click", signOut);
-    $("joinBtn").addEventListener("click", joinLive);
-    $("joinSession").addEventListener("keydown", (e) => { if (e.key === "Enter") joinLive(); });
     $("tabGm").addEventListener("click", () => setMode("gm"));
     $("tabPlayer").addEventListener("click", () => setMode("player"));
     $("peSkill1").addEventListener("change", syncEntry);
@@ -1667,9 +1684,8 @@
     renderLive();
     if (urlSession) {
       setMode("player");
-      $("joinSession").value = urlSession;
       history.replaceState(null, "", location.pathname);
-      joinLive();
+      joinLive(urlSession);
     }
 
     $("seedApply").addEventListener("click", () => guard("Load that seed?", "Load", applySeed));
