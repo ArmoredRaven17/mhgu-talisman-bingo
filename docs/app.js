@@ -249,6 +249,9 @@
   // was live has `lockUnmatched: true` in localStorage, and honouring that with no control on
   // the page would strand them with an uncompletable card.
   let lockUnmatched = false;
+  // "gm" rolls talismans here; "player" types in what someone else called. Persisted, because
+  // which one you are is a property of your seat at the table, not of the card.
+  let mode = "gm";
 
   const TIER_PAIRS = TIERS.map((t) => [t, TIER_W[t]]);
 
@@ -333,6 +336,7 @@
       created: Date.now(), need: built.need, short: built.need - built.filled,
       draws: 0, firstBingoDraw: null, blackoutDraw: null, log: [], last: null,
     };
+    if (mode === "player") buildEntryForm();
     renderCard();
     saveCard();
   }
@@ -382,16 +386,15 @@
   // That is the whole reason marking is manual now. Auto-marking made the draw count an
   // objective score; with several people racing one seed, the draw count is the caller's
   // clock and the marking is each player's own.
-  function drawOnce() {
-    if (!card || isComplete()) return null;
-    const charm = (view || ROLL.table(card.keep)).draw(TIER_PAIRS);
+  // ONE path for a talisman reaching the card, whether the Gamemaster rolled it here or a
+  // player typed in what was called across the table. The hint system is the whole reason the
+  // Player tab exists, so a typed talisman has to be indistinguishable from a rolled one from
+  // this point on -- anything else and the two tabs drift.
+  function applyCharm(charm, typed) {
     if (!charm) return null;
     // Two sets, and the difference matters. `hint` is what to go click NOW, so it skips
     // squares already marked. `eligible` is every square ANY draw has ever satisfied, and it
-    // only grows — it is what makes a square markable at all.
-    //
-    // It cannot be derived from card.log: that keeps the last 50 draws for display, so a
-    // square matched on draw 3 would quietly become unmarkable by draw 60.
+    // only grows.
     const hint = [], eligible = new Set(card.eligible || []);
     for (let i = 0; i < card.cells.length; i++) {
       const cell = card.cells[i];
@@ -404,17 +407,48 @@
     card.eligible = [...eligible];
     card.hint = hint;
     card.last = { charm: charm, hits: hint.length };
-    card.log.unshift({ charm: charm, hits: hint.length, at: card.draws });
+    card.log.unshift({ charm: charm, hits: hint.length, at: card.draws, typed: !!typed });
     if (card.log.length > 50) card.log.length = 50;
     return { charm: charm, hits: hint };
   }
 
-  // Marking is the player's call, so the milestones are stamped when THEY complete a line or
-  // the board — against the caller's draw count at that moment. Frozen once set: a later
-  // unmark must not be able to move a score that already happened.
-  // With the setting off, every square is claimable and the draw history is advisory only —
-  // which is the honest way to play if someone is calling from the physical game rather than
-  // from this app's roller.
+  function drawOnce() {
+    if (!card || isComplete()) return null;
+    const charm = (view || ROLL.table(card.keep)).draw(TIER_PAIRS);
+    return charm ? applyCharm(charm, false) : null;
+  }
+
+  // Undo a mis-entered talisman. Only offered on the Player tab: a typo is a player problem,
+  // whereas a Gamemaster deleting a roll they didn't like is just cheating with extra steps.
+  //
+  // Everything newer shifts down a number so the log stays sequential. card.eligible is left
+  // alone deliberately -- with the marking gate disabled it has no effect, and rebuilding it
+  // from the log would be wrong anyway, since the log only keeps the last 50 draws.
+  function removeDraw(at) {
+    if (!card) return;
+    const i = card.log.findIndex((e) => e.at === at);
+    if (i < 0) return;
+    card.log.splice(i, 1);
+    for (const e of card.log) if (e.at > at) e.at--;
+    card.draws = Math.max(0, card.draws - 1);
+    const newest = card.log[0];
+    if (newest) {
+      const hint = [];
+      for (let j = 0; j < card.cells.length; j++) {
+        const cell = card.cells[j];
+        if (!cell.cond || card.marked.has(j)) continue;
+        if (satisfies(newest.charm, cell.cond)) hint.push(j);
+      }
+      card.hint = hint;
+      card.last = { charm: newest.charm, hits: newest.hits };
+    } else {
+      card.hint = [];
+      card.last = null;
+    }
+    renderCard();
+    saveCard();
+  }
+
   const isEligible = (i) =>
     !lockUnmatched || (!!card && (card.eligible || []).indexOf(i) > -1);
 
@@ -656,10 +690,21 @@
         h.title = entry.hits + (entry.hits === 1 ? " square on your card matches" : " squares on your card match") + " this talisman";
         row.appendChild(h);
       }
+      if (mode === "player") {
+        const x = document.createElement("button");
+        x.type = "button";
+        x.className = "log-del";
+        x.textContent = "×";
+        x.title = "Remove this talisman";
+        x.setAttribute("aria-label", "Remove talisman " + entry.at);
+        x.addEventListener("click", () => removeDraw(entry.at));
+        row.appendChild(x);
+      }
       log.appendChild(row);
     }
 
     $("drawBtn").disabled = isComplete();
+    $("peAdd").disabled = isComplete();
   }
 
   function updateSeedBar() {
@@ -1004,10 +1049,91 @@
     }
   }
 
+  // ── Player entry ───────────────────────────────────────────────────────────
+  const PTS_MIN2 = -10, PTS_MAX = 13;
+
+  function opt(sel, value, label) {
+    const o = document.createElement("option");
+    o.value = String(value); o.textContent = label;
+    sel.appendChild(o);
+    return o;
+  }
+
+  // The skill lists are the CARD'S KEPT TREES, not all 137. A talisman rolled for this card
+  // can only carry kept trees, so anything else would be unenterable anyway -- and 20 names is
+  // a usable dropdown where 137 is not.
+  function buildEntryForm() {
+    const keep = (card && card.keep) || [];
+    const trees = keep.slice().sort((a, b) => treeName(a).localeCompare(treeName(b)));
+
+    const rar = $("peRarity"); rar.textContent = "";
+    for (let r = 1; r <= 10; r++) opt(rar, r, charmName(r));
+    rar.value = "1";
+
+    const s1 = $("peSkill1"), s2 = $("peSkill2");
+    s1.textContent = ""; s2.textContent = "";
+    opt(s2, "", "(none)");
+    for (const id of trees) { opt(s1, id, treeName(id)); opt(s2, id, treeName(id)); }
+
+    // Slot 1 is never zero or negative: of the 248 legal first-skill rows in the tables, not
+    // one can roll below +1. Slot 2 straddles zero, and a 0-point second skill is dropped by
+    // the game as no second skill at all -- so it is "(none)" here rather than a 0.
+    const p1 = $("pePts1"); p1.textContent = "";
+    for (let v = 1; v <= PTS_MAX; v++) opt(p1, v, "+" + v);
+    const p2 = $("pePts2"); p2.textContent = "";
+    for (let v = PTS_MAX; v >= PTS_MIN2; v--) if (v !== 0) opt(p2, v, (v > 0 ? "+" : "") + v);
+
+    const sl = $("peSlots"); sl.textContent = "";
+    for (let n = 0; n <= 3; n++) opt(sl, n, SLOT_GLYPH[n] + "  (" + n + ")");
+    syncEntry();
+  }
+
+  // The game never puts the same tree in both slots, so skill 2 cannot offer skill 1.
+  function syncEntry() {
+    const a = $("peSkill1").value, s2 = $("peSkill2");
+    for (const o of s2.options) o.disabled = o.value !== "" && o.value === a;
+    if (s2.value && s2.value === a) s2.value = "";
+    const has2 = !!s2.value;
+    $("pePts2").disabled = !has2;
+    $("pePts2").parentElement.style.opacity = has2 ? "1" : ".45";
+  }
+
+  function addTypedCharm() {
+    if (!card || isComplete()) return;
+    const t1 = parseInt($("peSkill1").value, 10);
+    if (!Number.isFinite(t1)) return;
+    const k = [[t1, parseInt($("pePts1").value, 10)]];
+    const t2 = $("peSkill2").value;
+    if (t2 !== "" && parseInt(t2, 10) !== t1) k.push([parseInt(t2, 10), parseInt($("pePts2").value, 10)]);
+    const charm = { r: parseInt($("peRarity").value, 10), s: parseInt($("peSlots").value, 10), k: k };
+    const r = applyCharm(charm, true);
+    const note = $("peNote");
+    note.textContent = r
+      ? (r.hits.length ? "Added — " + r.hits.length + (r.hits.length === 1 ? " square lights up" : " squares light up")
+                       : "Added — nothing on your card matches it")
+      : "";
+    renderCard();
+    saveCard();
+  }
+
+  function setMode(next) {
+    mode = next === "player" ? "player" : "gm";
+    $("tabGm").setAttribute("aria-selected", mode === "gm" ? "true" : "false");
+    $("tabPlayer").setAttribute("aria-selected", mode === "player" ? "true" : "false");
+    $("tabGm").classList.toggle("on", mode === "gm");
+    $("tabPlayer").classList.toggle("on", mode === "player");
+    $("gmPanel").classList.toggle("hidden", mode !== "gm");
+    $("playerPanel").classList.toggle("hidden", mode !== "player");
+    $("logTitle").textContent = mode === "player" ? "Talismans logged" : "Recent draws";
+    if (mode === "player") buildEntryForm();
+    saveSettings();
+    if (card) renderCard();
+  }
+
   // ── Persistence ────────────────────────────────────────────────────────────
   function saveSettings() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, showReroll: showReroll, softHighlight: softHighlight, previewMin: previewMin }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, showReroll: showReroll, softHighlight: softHighlight, mode: mode, previewMin: previewMin }));
     } catch (e) {}
   }
   function saveCard() {
@@ -1025,6 +1151,7 @@
     $("showReroll").checked = showReroll;
     softHighlight = d.softHighlight !== false;
     $("softHighlight").checked = softHighlight;
+    if (d.mode === "player" || d.mode === "gm") mode = d.mode;
     if (Number.isInteger(d.previewMin)) previewMin = d.previewMin;
     $("previewMin").value = String(previewMin);
     if (d.cfg && typeof d.cfg === "object") {
@@ -1168,6 +1295,13 @@
     $("resetBtn").addEventListener("click", () => guard("Reset everything?", "Reset", doReset));
 
     $("drawBtn").addEventListener("click", doDraw);
+    $("tabGm").addEventListener("click", () => setMode("gm"));
+    $("tabPlayer").addEventListener("click", () => setMode("player"));
+    $("peSkill1").addEventListener("change", syncEntry);
+    $("peSkill2").addEventListener("change", syncEntry);
+    $("peAdd").addEventListener("click", addTypedCharm);
+    // After the card is restored or generated, so buildEntryForm can read card.keep.
+    setMode(mode);
 
     $("seedApply").addEventListener("click", () => guard("Load that seed?", "Load", applySeed));
     $("seedInput").addEventListener("keydown", (e) => {

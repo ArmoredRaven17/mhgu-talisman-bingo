@@ -190,6 +190,42 @@ if the gate returns.
 
 There is no auto-draw. Draws are one at a time, because a person is reading them out.
 
+## Gamemaster and Player tabs
+
+Two seats at the same table, persisted in settings because which one you are is a property of
+where you're sitting, not of the card.
+
+- **Gamemaster** rolls talismans here. This is the original behaviour.
+- **Player** has no roller. It logs the talisman someone else called, via dropdowns for the
+  talisman, both skills, their points and the slot count.
+
+The Player tab exists so a player who isn't calling can still use the hint system. That is the whole
+point, so `applyCharm()` is the single path a talisman takes to a card and a typed talisman is
+indistinguishable from a rolled one after that call. Two paths would drift.
+
+**Rarity is in the entry form even though it looks like skill data.** A fifth of the pools are
+rarity tiles, so leaving it out would make "Roll a Creator Talisman" permanently unsatisfiable for
+every player — the tab would look complete and silently break a whole pool.
+
+The skill dropdowns list the **card's 20 kept trees**, not all 137. A talisman rolled for this card
+can only carry kept trees, so the rest are unenterable anyway, and 20 names is a usable dropdown
+where 137 is not. Slot 1 offers +1..+13 because no legal first-skill row can roll below +1 (checked
+against all 248); slot 2 offers −10..+13 without 0, because the game drops a 0-point second skill
+as no second skill at all, which is what "(none)" is for. Skill 2 cannot offer whatever skill 1 is
+set to — the game never puts one tree in both slots.
+
+**Only the Player tab can delete a log entry.** A typo is a player problem; a Gamemaster deleting a
+roll they didn't like is cheating with extra steps. Removal renumbers everything newer, decrements
+the draw count, and recomputes the hint from whatever is newest afterwards.
+
+`card.eligible` is deliberately NOT rebuilt on removal. With the marking gate disabled it has no
+effect, and rebuilding it from `card.log` would be wrong regardless, since the log only keeps 50
+entries. If the gate ever returns, this is the first thing to fix.
+
+**This is the groundwork for the transport question, not a replacement for it.** A player still has
+to hear the call and type it. It does mean the hint system now works for everyone at the table
+rather than only the caller, which is what a Twitch/Worker Gamemaster would automate later.
+
 ## Pacing
 
 `scripts/simulate.mjs` is the regression guard on the floors, the ceiling, `KEEP_N` and the tier

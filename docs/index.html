@@ -8,7 +8,7 @@
 <meta name="description" content="A bingo card of talisman conditions — keep drawing charms until one fills the line you needed.">
 <link rel="icon" type="image/png" href="assets/TalismanIcons/icon_talisman_r10.png">
 <!-- Bump ?v= on any styles/app/data change so browsers fetch fresh copies (no hard-refresh needed) -->
-<link rel="stylesheet" href="styles.css?v=8">
+<link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 <div id="app">
@@ -91,15 +91,39 @@
       </div>
       <p id="status" class="status" aria-live="polite"></p>
 
+      <div class="modebar" role="tablist" aria-label="Who you are at this table">
+        <button id="tabGm" class="modetab" role="tab" aria-selected="true">Gamemaster</button>
+        <button id="tabPlayer" class="modetab" role="tab" aria-selected="false">Player</button>
+      </div>
+
       <div class="drawbar">
-        <div class="draw-controls">
+        <div class="draw-controls" id="gmPanel" role="tabpanel" aria-labelledby="tabGm">
           <button id="drawBtn" class="btn accent block">Draw Talisman</button>
           <p class="draw-count">Draws: <strong id="drawCount">0</strong></p>
           <p id="drawScore" class="hint"></p>
         </div>
+
+        <div class="draw-controls player-entry hidden" id="playerPanel" role="tabpanel" aria-labelledby="tabPlayer">
+          <p class="hint">Log the talisman the Gamemaster called, and your card will light up
+             the squares it satisfies.</p>
+          <label class="pe-row"><span>Talisman</span>
+            <select id="peRarity" class="sel"></select></label>
+          <label class="pe-row"><span>Skill 1</span>
+            <select id="peSkill1" class="sel"></select></label>
+          <label class="pe-row"><span>Points</span>
+            <select id="pePts1" class="sel"></select></label>
+          <label class="pe-row"><span>Skill 2</span>
+            <select id="peSkill2" class="sel"></select></label>
+          <label class="pe-row"><span>Points</span>
+            <select id="pePts2" class="sel"></select></label>
+          <label class="pe-row"><span>Slots</span>
+            <select id="peSlots" class="sel"></select></label>
+          <button id="peAdd" class="btn accent block">Add Talisman</button>
+          <p id="peNote" class="hint"></p>
+        </div>
         <div id="lastCharm" class="last-charm"></div>
         <div class="draw-log-wrap">
-          <p class="hint">Recent draws</p>
+          <p class="hint" id="logTitle">Recent draws</p>
           <div id="drawLog" class="draw-log"></div>
         </div>
       </div>
@@ -250,6 +274,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=2"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

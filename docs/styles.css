@@ -498,6 +498,38 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 .charm.hit .charm-name{color:var(--win)}
 .charm.god{outline:2px solid var(--win);outline-offset:4px;border-radius:8px}
 
+/* Which seat you are at the table. Two tabs rather than a toggle because they are not two
+   states of one control -- the Gamemaster rolls talismans, the player transcribes them, and
+   the panel underneath changes completely. */
+.modebar{display:flex;gap:4px;margin-bottom:8px}
+.modetab{
+  flex:1;padding:8px 12px;border:1px solid var(--line);border-radius:6px 6px 0 0;
+  background:var(--card);color:var(--text-dim);font:inherit;font-size:13px;font-weight:600;
+  cursor:pointer;opacity:.6;
+}
+.modetab:hover{opacity:.85}
+.modetab.on{opacity:1;background:var(--well);border-bottom-color:transparent;color:var(--text)}
+.modetab:focus-visible{outline:2px solid var(--cta);outline-offset:2px}
+
+.player-entry{display:flex;flex-direction:column;gap:6px}
+.pe-row{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.pe-row>span{flex:0 0 62px;opacity:.75}
+/* Matches .field select, which is what every other dropdown on the page uses. */
+.pe-row .sel{
+  flex:1;min-width:0;
+  background:var(--bg2);color:var(--text);border:1px solid var(--line);
+  border-radius:7px;padding:5px 8px;font-size:12.5px;line-height:1.4;
+}
+.pe-row .sel:disabled{opacity:.5;cursor:not-allowed}
+.pe-row .sel option:disabled{opacity:.35}
+/* Removing a mis-entered talisman. Player tab only. */
+.log-del{
+  flex-shrink:0;background:none;border:0;color:var(--text-dim);opacity:.45;
+  cursor:pointer;font-size:14px;line-height:1;padding:0 2px;
+}
+.log-del:hover{opacity:1;color:#ff8f8f}
+.log-del:focus-visible{outline:2px solid var(--cta);outline-offset:1px;opacity:1}
+
 .draw-log-wrap{display:flex;flex-direction:column;gap:4px;min-width:0}
 .draw-log-wrap .hint{margin:0}
 .draw-log{
