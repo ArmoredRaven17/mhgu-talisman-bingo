@@ -1126,6 +1126,16 @@
     $("twitchLoggedOut").classList.toggle("hidden", !!who);
     $("twitchLoggedIn").classList.toggle("hidden", !who);
     if (who) $("twitchLoginName").textContent = who;
+
+    // Nightbot pastes the whole $(urlfetch ...) tag in as the command's RESPONSE; Moobot and
+    // most others want the bare URL in their own fetch tag. Both forms, same as MHGU Bingo's
+    // bot modal and the Quest Randomizer's.
+    //
+    // Not an !addcom line: that is Nightbot's syntax for CREATING a command, which is useless
+    // in a bot's web UI and wrong for every other bot.
+    const url = BOT_API_ORIGIN + "/live-link?channel=";
+    $("cmdNightbot").textContent = "$(urlfetch " + url + "$(channel))";
+    $("cmdUrl").textContent = url + (who || "YOUR_CHANNEL");
   }
 
   function signOut() {

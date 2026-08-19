@@ -8,7 +8,7 @@
 <meta name="description" content="A bingo card of talisman conditions — keep drawing charms until one fills the line you needed.">
 <link rel="icon" type="image/png" href="assets/TalismanIcons/icon_talisman_r10.png">
 <!-- Bump ?v= on any styles/app/data change so browsers fetch fresh copies (no hard-refresh needed) -->
-<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
 <div id="app">
@@ -260,14 +260,12 @@
 
     <hr class="modal-divider">
 
-    <h3>A chat command so nobody types a seed</h3>
-    <p class="hint">While you are live, this returns a join link for whoever asks. A session seed is
-       25 characters with hyphens &mdash; not something chat should be retyping.</p>
-    <p class="hint">Nightbot:</p>
-    <pre class="cmd" id="cmdNightbot">!addcom !talisman $(urlfetch https://mhgu-bot-api.raven-mhgu.workers.dev/live-link?channel=$(channel))</pre>
-    <p class="hint">Or the plain URL, for bots that want it in their own fetch tag:</p>
-    <pre class="cmd" id="cmdUrl">https://mhgu-bot-api.raven-mhgu.workers.dev/live-link?channel=YOUR_CHANNEL</pre>
-    <p class="hint">Anyone clicking it lands on their own card, already following your draws.</p>
+    <h3>!talisman</h3>
+    <p class="hint">This is the command for chat to join your live session.</p>
+    <p class="cmd-desc">Nightbot</p>
+    <pre class="cmd" id="cmdNightbot"></pre>
+    <p class="cmd-desc">Moobot / plain URL</p>
+    <pre class="cmd" id="cmdUrl"></pre>
 
     <div class="row end"><button id="twitchClose" class="btn">Close</button></div>
   </div>
@@ -353,6 +351,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=20"></script>
+<script src="app.js?v=21"></script>
 </body>
 </html>
