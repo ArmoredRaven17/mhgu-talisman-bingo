@@ -8,7 +8,7 @@
 <meta name="description" content="A bingo card of talisman conditions — keep drawing charms until one fills the line you needed.">
 <link rel="icon" type="image/png" href="assets/TalismanIcons/icon_talisman_r10.png">
 <!-- Bump ?v= on any styles/app/data change so browsers fetch fresh copies (no hard-refresh needed) -->
-<link rel="stylesheet" href="styles.css?v=10">
+<link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
 <div id="app">
@@ -102,13 +102,29 @@
           <button id="drawBtn" class="btn accent block">Draw Talisman</button>
           <p class="draw-count">Draws: <strong id="drawCount">0</strong></p>
           <p id="drawScore" class="hint"></p>
+
+          <div class="live-box">
+            <button id="goLiveBtn" class="btn tiny block">Go live</button>
+            <p id="gmLiveStatus" class="hint"></p>
+            <label class="chk hidden" id="shareRow"><span>Share this:</span></label>
+            <input id="shareSession" class="seed-share hidden" type="text" readonly spellcheck="false">
+            <button id="endLiveBtn" class="btn tiny block hidden">End session</button>
+          </div>
         </div>
 
         <div class="draw-controls player-entry hidden" id="playerPanel" role="tabpanel" aria-labelledby="tabPlayer">
+          <div class="live-box">
+            <input id="joinSession" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="Session from the Gamemaster">
+            <button id="joinBtn" class="btn tiny block">Join live session</button>
+            <p id="joinStatus" class="hint"></p>
+          </div>
+
           <button id="peNext" class="btn accent block">Next Talisman</button>
           <p class="draw-count">Talismans seen: <strong id="peCount">0</strong></p>
-          <p class="hint">Everyone in a session draws the same talismans in the same order, so
-             press this once each time the Gamemaster calls one. Stay on their number.</p>
+          <p class="hint" id="peManualHint">Everyone in a session draws the same talismans in the
+             same order, so press this once each time the Gamemaster calls one. Stay on their
+             number — or join above and let it follow along by itself.</p>
           <details class="pe-manual">
             <summary>Enter one by hand</summary>
             <p class="hint">Only needed if you've lost your place, or the Gamemaster is calling
@@ -182,15 +198,21 @@
        junk-heavy &mdash; the shape of a real charm run. Most of what you pull is rubbish.
        That's the point.</p>
 
-    <h3>Seeds</h3>
-    <p>Every card has a seed like <code>MHGU-5F-N4P3S1R2C3-K7T2NX-9C4A</code>, shown in the
-       title bar. Paste one back to rebuild that board.</p>
-    <p><strong>The draws are not seeded.</strong> Two people on the same seed get the same
-       twenty-five squares and completely different luck &mdash; which is the point, because
-       the marking is automatic and a shared draw stream would give everyone an identical
-       game with exactly one possible score.</p>
-    <p>The seed carries your grid size and pool weights, which is everything that decides
-       the squares.</p>
+    <h3>Seeds and sessions</h3>
+    <p>A seed splits in two: <code>MHGU-5F-N4P3S1R2C3-EYBKVK</code> is the <strong>session</strong>,
+       and the <code>-DCK0-HMGF</code> on the end is your card. <strong>Copy session</strong>
+       hands out the first part; <strong>Copy card</strong> hands out the whole thing.</p>
+    <p>The session fixes the skill pool and the entire sequence of talismans. Everyone on it
+       draws the same charms in the same order &mdash; but each player gets their own twenty-five
+       squares, because a shared board would mean everyone calling BINGO on the same draw.</p>
+    <p>Marking is yours. A drawn talisman glows the squares it satisfies; you click them.</p>
+
+    <h3>Playing together</h3>
+    <p>One person is the <strong>Gamemaster</strong> and draws. Everyone else opens the
+       <strong>Player</strong> tab, pastes the session, and their card follows along on its own.
+       Join partway through and you'll catch up on everything called so far.</p>
+    <p>If the connection drops, nothing is lost: the session alone determines every talisman, so
+       the manual controls come back and you can keep playing off what the Gamemaster calls.</p>
 
     <h3>Rerolling</h3>
     <p>Hover a square and hit <strong>&#8635;</strong> to swap just that condition. Once you
@@ -282,6 +304,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>

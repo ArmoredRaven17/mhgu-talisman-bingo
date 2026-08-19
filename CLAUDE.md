@@ -287,5 +287,13 @@ namespaced `mhgu-talisman-bingo-*`. Don't introduce an unprefixed key.
 
 ## Parity
 
-There is no desktop version and none is planned. There is no Twitch/Worker integration — the seed
-plus the unseeded draw stream is the whole sharing story.
+There is no desktop version and none is planned.
+
+**There IS a Worker integration now**, which this file used to deny. Live sessions run through
+`mhgu-bot-api.raven-mhgu.workers.dev` (source in `MHGU Quest Randomizer/worker/`), reusing its
+existing Twitch OAuth. The Gamemaster's client POSTs a draw number; viewers poll for it. See the
+Sessions section above for why only an integer crosses the wire.
+
+Nothing about the app *requires* it: with no network, solo play, drawing and manual entry all work
+exactly as before, and a dropped session falls back to the manual controls. The Worker automates
+what a Gamemaster reading numbers aloud already did.

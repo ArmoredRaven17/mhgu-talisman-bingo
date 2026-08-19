@@ -29,21 +29,24 @@ filtering are never shown: not knowing which square will break first is the poin
 ## Roll tiers
 
 Charms come off four tables: mystery rolls the junk, enduring rolls Hero, Legend and Creator
-talismans. The weights decide how often each is drawn.
+talismans. The mix is fixed and junk-heavy — the shape of a real charm run.
 
-They're a real lever, but not the one you'd expect — they mostly decide *which squares can exist*
+It matters more than it looks, but not in the way you'd expect: it decides *which squares can exist*
 rather than how long a card takes. A mystery talisman never carries a second skill and never reaches
-two slots, so a mystery-heavy mix leaves far fewer conditions reachable, and the app stops offering
-the ones it can't produce.
+two slots, so those conditions are simply rarer, and the app never offers one it can't produce.
 
-## Seeds
+## Seeds and sessions
 
-Every card has a seed like `MHGU-5F-N4P3S1R2C3-K7T2NX-9C4A`, shown in the title bar. Paste one back to
-rebuild that board.
+A seed is in two halves — `MHGU-5F-N4P3S1R2C3-EYBKVK` is the **session**, and the trailing
+`-DCK0-HMGF` is your card.
 
-**The draws are not seeded.** Two people on the same seed get the same twenty-five squares and
-completely different luck — which is the point, because the marking is automatic and a shared draw
-stream would give everyone an identical game with exactly one possible score.
+The session fixes the pruned skill pool *and* the whole sequence of talismans, so everyone on it
+draws the same charms in the same order. The card half is per player, because shared calls with an
+identical board would have everyone calling BINGO on the same draw.
+
+One person is the Gamemaster and draws; everyone else joins the session and their card follows
+along, catching up on anything called before they arrived. Lose the connection and the session alone
+still determines every talisman, so play carries on by ear.
 
 ## Development
 

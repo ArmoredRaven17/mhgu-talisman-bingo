@@ -401,10 +401,10 @@
   // That is the whole reason marking is manual now. Auto-marking made the draw count an
   // objective score; with several people racing one seed, the draw count is the caller's
   // clock and the marking is each player's own.
-  // ONE path for a talisman reaching the card, whether the Gamemaster rolled it here or a
-  // player typed in what was called across the table. The hint system is the whole reason the
-  // Player tab exists, so a typed talisman has to be indistinguishable from a rolled one from
-  // this point on -- anything else and the two tabs drift.
+  // ONE path for a talisman reaching the card, whatever produced it: the Gamemaster rolling
+  // here, a live session syncing a draw number off the Worker, or a player typing in what was
+  // called across the table. All three must be indistinguishable from this point on -- any
+  // second path is a place for the modes to drift apart.
   function applyCharm(charm, typed) {
     if (!charm) return null;
     // Two sets, and the difference matters. `hint` is what to go click NOW, so it skips
@@ -454,6 +454,9 @@
   // from the log would be wrong anyway, since the log only keeps the last 50 draws.
   function removeDraw(at) {
     if (!card) return;
+    // Not while following a session: this renumbers the log and decrements card.draws,
+    // which would put the follower permanently out of step with the server's count.
+    if (live && !live.mine && !liveLost) return;
     const i = card.log.findIndex((e) => e.at === at);
     if (i < 0) return;
     card.log.splice(i, 1);
@@ -1084,6 +1087,187 @@
     }
   }
 
+  // ── Live sessions ──────────────────────────────────────────────────────────
+  // A Gamemaster draws; everyone following the session sees it appear on their own card.
+  //
+  // Only ONE INTEGER crosses the network — the current draw number. drawAt(n) is a pure
+  // function of (session string, n), so every client turns that integer into the identical
+  // talisman locally. The server never sees a talisman, a card or a mark.
+  //
+  // That is also why losing the connection is survivable: the session string alone still
+  // determines the prune and the whole draw sequence, so a dropped viewer falls back to the
+  // manual controls and keeps playing off what the Gamemaster calls out.
+  const TOKEN_KEY = "mhgu-talisman-bingo-token";
+  const POLL_MS = 3000;
+
+  let live = null;        // { session, n, ended, owner, mine } while connected
+  let livePoll = null;
+  let liveLost = false;
+
+  const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; } };
+  const setToken = (t) => {
+    try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+  };
+
+  // The Worker hands the session back in the URL FRAGMENT, which never reaches a server and
+  // never lands in a Referer header. Same handoff MHGU Bingo uses, and the reason a GitHub
+  // Pages app can authenticate against a workers.dev origin at all.
+  function captureTokenFromHash() {
+    const m = (location.hash || "").match(/[#&]mhgu_bot_token=([^&]+)/);
+    if (!m) return;
+    setToken(decodeURIComponent(m[1]));
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+
+  async function api(path, opts) {
+    const o = Object.assign({ headers: {} }, opts || {});
+    const tok = getToken();
+    if (tok) o.headers["Authorization"] = "Bearer " + tok;
+    if (o.body) o.headers["Content-Type"] = "application/json";
+    const res = await fetch(BOT_API_ORIGIN + path, o);
+    if (res.status === 401) { setToken(""); throw new Error("not_logged_in"); }
+    if (res.status === 304) return null;
+    const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data && data.error) || ("http_" + res.status));
+    return data;
+  }
+
+  // Apply every draw from where this card is up to `n`. Deterministic, so a viewer joining
+  // at draw 40 replays all 40 and their card reflects the whole game. The guard is a
+  // runaway stop, not a policy — a well-behaved server can never ask for a jump that big.
+  function syncTo(n) {
+    if (!card) return 0;
+    let applied = 0;
+    while (card.draws < n && applied < 500) {
+      const charm = drawAt(card.draws + 1);
+      if (!charm) break;
+      applyCharm(charm, false);
+      applied++;
+    }
+    if (applied) { renderCard(); saveCard(); }
+    return applied;
+  }
+
+  function liveNote(id, msg, bad) {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = msg || "";
+    el.classList.toggle("bad", !!bad);
+  }
+
+  function stopPolling() {
+    if (livePoll) clearInterval(livePoll);
+    livePoll = null;
+  }
+
+  // Polling, not a socket, and not as a compromise. A Twitch stream runs seconds behind
+  // live, so pushing faster would light a viewer's card up BEFORE they hear the talisman
+  // called — it would spoil the reveal rather than improve it.
+  function startPolling() {
+    stopPolling();
+    livePoll = setInterval(pollLive, POLL_MS + Math.floor(Math.random() * 600));
+    pollLive();
+  }
+
+  async function pollLive() {
+    if (!live) return;
+    try {
+      const st = await api("/live/" + encodeURIComponent(live.session));
+      if (st) {
+        live.n = st.n; live.ended = !!st.ended;
+        syncTo(st.n);
+      }
+      if (liveLost) { liveLost = false; renderLive(); }
+      if (live.ended) { liveNote("joinStatus", "The Gamemaster ended the session."); stopPolling(); }
+      else if (!liveLost && !live.mine) liveNote("joinStatus", "Following the Gamemaster — draw " + live.n + ".");
+    } catch (e) {
+      // Degrade, don't die. The manual controls come back and the seed still holds
+      // everything needed to keep playing by ear.
+      if (!liveLost) { liveLost = true; renderLive(); }
+    }
+  }
+
+  function renderLive() {
+    const following = !!live && !liveLost && !live.mine;
+    // A follower must not be able to advance their own counter: that is both a desync and a
+    // spoiler, since they could run ahead of what has actually been called.
+    $("peNext").classList.toggle("hidden", following);
+    $("peManualHint").classList.toggle("hidden", following);
+    const manual = document.querySelector(".pe-manual");
+    if (manual) manual.classList.toggle("hidden", following);
+
+    const hosting = !!live && live.mine && !liveLost;
+    $("goLiveBtn").classList.toggle("hidden", hosting);
+    $("endLiveBtn").classList.toggle("hidden", !hosting);
+    $("shareRow").classList.toggle("hidden", !hosting);
+    $("shareSession").classList.toggle("hidden", !hosting);
+    if (hosting) $("shareSession").value = live.session;
+
+    if (liveLost) {
+      liveNote("joinStatus", "Lost the session — keep playing off what the Gamemaster calls.", true);
+      liveNote("gmLiveStatus", "Lost the connection — draws are local until it returns.", true);
+    } else if (hosting) {
+      liveNote("gmLiveStatus", "Live. Viewers on this session follow your draws.");
+    }
+  }
+
+  async function goLive() {
+    if (!card) return;
+    if (!getToken()) {
+      location.href = BOT_API_ORIGIN + "/auth/login?return=talisman";
+      return;
+    }
+    try {
+      const st = await api("/live", { method: "POST", body: JSON.stringify({ session: card.session }) });
+      live = { session: st.session, n: st.n | 0, ended: false, owner: st.owner, mine: true };
+      liveLost = false;
+      renderLive();
+    } catch (e) {
+      if (e.message === "not_logged_in") {
+        location.href = BOT_API_ORIGIN + "/auth/login?return=talisman";
+        return;
+      }
+      liveNote("gmLiveStatus", e.message === "already_claimed"
+        ? "Someone else is already running this session."
+        : "Couldn't go live — " + e.message, true);
+    }
+  }
+
+  async function endLive() {
+    if (!live || !live.mine) return;
+    try { await api("/live/" + encodeURIComponent(live.session) + "/end", { method: "POST" }); } catch (e) {}
+    live = null;
+    stopPolling();
+    renderLive();
+    liveNote("gmLiveStatus", "Session ended.");
+  }
+
+  async function joinLive() {
+    const raw = ($("joinSession").value || "").trim().toUpperCase();
+    if (!raw) return;
+    try {
+      const st = await api("/live/" + encodeURIComponent(raw));
+      // Joining rebuilds the card off the session, so the prune matches everyone else's and
+      // the player token is fresh — same session, own board.
+      if (!card || card.session !== st.session) {
+        $("seedInput").value = st.session;
+        applySeed();
+      }
+      live = { session: st.session, n: st.n | 0, ended: !!st.ended, owner: st.owner, mine: false };
+      liveLost = false;
+      const caught = syncTo(st.n);
+      renderLive();
+      liveNote("joinStatus", caught
+        ? "Joined — caught up on " + caught + (caught === 1 ? " draw." : " draws.")
+        : "Joined. Waiting for the next draw.");
+      startPolling();
+    } catch (e) {
+      liveNote("joinStatus", e.message === "not_found"
+        ? "No live session with that seed."
+        : "Couldn't join — " + e.message, true);
+    }
+  }
+
   // ── Player entry ───────────────────────────────────────────────────────────
   const PTS_MIN2 = -10, PTS_MAX = 13;
 
@@ -1306,6 +1490,7 @@
       });
     });
 
+    captureTokenFromHash();
     loadSettings();
     buildCatRows();
     buildSwatches();
@@ -1336,7 +1521,25 @@
     $("newCardBtn").addEventListener("click", newCard);
     $("resetBtn").addEventListener("click", () => guard("Reset everything?", "Reset", doReset));
 
-    $("drawBtn").addEventListener("click", doDraw);
+    $("drawBtn").addEventListener("click", async () => {
+      // Offline, or not hosting: just draw locally.
+      if (!live || !live.mine || liveLost) { doDraw(); return; }
+      // Hosting: the SERVER's number is authoritative. Post first, then apply what it
+      // returns, so a Gamemaster whose request failed can never be a draw ahead of the
+      // audience following them.
+      try {
+        const st = await api("/live/" + encodeURIComponent(live.session) + "/draw",
+          { method: "POST", body: JSON.stringify({ n: card.draws + 1 }) });
+        live.n = st.n;
+        syncTo(st.n);
+      } catch (e) {
+        if (!liveLost) { liveLost = true; renderLive(); }
+      }
+    });
+    $("goLiveBtn").addEventListener("click", goLive);
+    $("endLiveBtn").addEventListener("click", endLive);
+    $("joinBtn").addEventListener("click", joinLive);
+    $("joinSession").addEventListener("keydown", (e) => { if (e.key === "Enter") joinLive(); });
     $("tabGm").addEventListener("click", () => setMode("gm"));
     $("tabPlayer").addEventListener("click", () => setMode("player"));
     $("peSkill1").addEventListener("change", syncEntry);
@@ -1352,6 +1555,7 @@
     });
     // After the card is restored or generated, so buildEntryForm can read card.keep.
     setMode(mode);
+    renderLive();
 
     $("seedApply").addEventListener("click", () => guard("Load that seed?", "Load", applySeed));
     $("seedInput").addEventListener("keydown", (e) => {
