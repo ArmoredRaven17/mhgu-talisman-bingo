@@ -1319,26 +1319,42 @@
     startPolling();
   }
 
+  // Every outcome reports INSIDE the modal. Failures used to go to gmLiveStatus, which lives
+  // in the panel under the card, so pressing Start and having it fail looked like nothing
+  // happened at all.
   async function goLive() {
     if (!card) return;
     if (!getToken()) {
+      liveNote("liveStartStatus", "Sending you to Twitch to sign in…");
       location.href = BOT_API_ORIGIN + "/auth/login?return=talisman";
       return;
     }
+    const btn = $("startLiveBtn");
+    btn.disabled = true;
+    liveNote("liveStartStatus", "Starting…");
     try {
       const st = await api("/live", { method: "POST", body: JSON.stringify({ session: card.session }) });
       live = { session: st.session, n: st.n | 0, ended: false, owner: st.owner, mine: true };
       liveLost = false;
       rememberLive();
+      liveNote("liveStartStatus", "");
       renderLive();
     } catch (e) {
       if (e.message === "not_logged_in") {
+        liveNote("liveStartStatus", "Sending you to Twitch to sign in…");
         location.href = BOT_API_ORIGIN + "/auth/login?return=talisman";
         return;
       }
-      liveNote("gmLiveStatus", e.message === "already_claimed"
-        ? "Someone else is already running this session."
-        : "Couldn't go live — " + e.message, true);
+      const why = e.message === "already_claimed"
+          ? "Someone else is already running a session on this seed. Make a new card and try again."
+        : e.message === "invalid_session"
+          ? "That card's session was rejected by the server."
+        : /fetch|network/i.test(e.message)
+          ? "Couldn't reach the server. Check your connection and try again."
+        : "Couldn't start the session — " + e.message;
+      liveNote("liveStartStatus", why, true);
+    } finally {
+      btn.disabled = false;
     }
   }
 
@@ -1349,6 +1365,7 @@
     stopPolling();
     rememberLive();
     renderLive();
+    liveNote("liveStartStatus", "Session ended. Viewers stop following it.");
     liveNote("gmLiveStatus", "Session ended.");
   }
 
@@ -1666,6 +1683,15 @@
       location.href = BOT_API_ORIGIN + "/auth/login?return=talisman";
     });
     $("twitchLogout").addEventListener("click", signOut);
+    $("startLiveBtn").addEventListener("click", async () => { await goLive(); renderTwitch(); });
+    $("stopLiveBtn").addEventListener("click", async () => { await endLive(); renderTwitch(); });
+    $("copyLiveSession").addEventListener("click", () => {
+      const b = $("copyLiveSession");
+      const done = () => { b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy session"; }, 1200); };
+      const v = $("liveSessionOut").value;
+      if (navigator.clipboard) navigator.clipboard.writeText(v).then(done, done);
+      else { $("liveSessionOut").select(); document.execCommand("copy"); done(); }
+    });
     $("tabGm").addEventListener("click", () => setMode("gm"));
     $("tabPlayer").addEventListener("click", () => setMode("player"));
     $("peSkill1").addEventListener("change", syncEntry);
