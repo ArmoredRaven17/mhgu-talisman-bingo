@@ -1191,7 +1191,11 @@
   }
 
   async function api(path, opts) {
-    const o = Object.assign({ headers: {} }, opts || {});
+    // no-store: the read carries an ETag and a short max-age, so the browser would answer a
+    // poll with a 304. That says "unchanged since you cached it" -- which says nothing about
+    // where this CARD is. After a reload the card can sit far behind the cached value, and a
+    // 304 then leaves it stranded there permanently.
+    const o = Object.assign({ headers: {}, cache: "no-store" }, opts || {});
     const tok = getToken();
     if (tok) o.headers["Authorization"] = "Bearer " + tok;
     if (o.body) o.headers["Content-Type"] = "application/json";
@@ -1244,10 +1248,10 @@
     if (!live) return;
     try {
       const st = await api("/live/" + encodeURIComponent(live.session));
-      if (st) {
-        live.n = st.n; live.ended = !!st.ended;
-        syncTo(st.n);
-      }
+      if (st) { live.n = st.n; live.ended = !!st.ended; }
+      // Sync unconditionally, not only when the response carried a body. Being behind must
+      // heal itself on the next tick whatever the transport did.
+      syncTo(live.n | 0);
       renderTwitch();
       if (liveLost) { liveLost = false; renderLive(); }
       if (live.ended) { liveNote("joinStatus", "The Gamemaster ended the session."); stopPolling(); }
@@ -1315,6 +1319,8 @@
     let d = null;
     try { d = JSON.parse(localStorage.getItem(LIVE_KEY) || "null"); } catch (e) {}
     if (!d || !d.session || !card || card.session !== d.session) return;
+    // n starts at the card's own position, NOT as a claim about the session. The immediate
+    // poll in startPolling() replaces it with the truth and syncTo() closes the gap.
     live = { session: d.session, n: card.draws | 0, ended: false, owner: null, mine: !!d.mine };
     renderLive();
     startPolling();
@@ -1667,7 +1673,14 @@
 
     $("drawBtn").addEventListener("click", async () => {
       // Offline, or not hosting: just draw locally.
-      if (!live || !live.mine || liveLost) { doDraw(); return; }
+      if (!live || !live.mine) { doDraw(); return; }
+      // Hosting but disconnected: do NOT draw locally. That advances this card without the
+      // server, so the audience never sees it and the two drift further apart.
+      if (liveLost) {
+        liveNote("gmLiveStatus", "Not connected — reconnecting before the next draw.", true);
+        pollLive();
+        return;
+      }
       // Hosting: the SERVER's number is authoritative. Post first, then apply what it
       // returns, so a Gamemaster whose request failed can never be a draw ahead of the
       // audience following them.
