@@ -1759,7 +1759,6 @@
       const note = $("peNote");
       if (!live) { note.textContent = "Not in a session — there is nothing to sync to."; return; }
       const btn = $("peNext");
-      const before = card.draws;
       btn.disabled = true;
       note.textContent = "Checking the session…";
       try {
@@ -1773,7 +1772,7 @@
             + (card.last && card.last.hits
               ? card.last.hits + (card.last.hits === 1 ? " square lights up" : " squares light up")
               : "Nothing on your card matches the newest one")
-          : "Already level with the Gamemaster at draw " + before + ".";
+          : "Already level with the Gamemaster at draw " + card.draws + ".";
       } catch (e) {
         if (!liveLost) { liveLost = true; renderLive(); }
         note.textContent = "Could not reach the session. Keep playing off what the Gamemaster calls.";
