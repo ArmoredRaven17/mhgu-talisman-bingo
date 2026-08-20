@@ -31,7 +31,7 @@
   const COLORS = [
     ["Teostra","#570B0B"],["Rathalos","#b51717"],
     ["Tetsucabra","#c65900"],["Agnaktor","#fc933e"],
-    ["Tigrex","#C8A319"],["Rajang","#f1d364"],
+    ["Tigrex","#57470B"],["Rajang","#B59417"],
     ["Deviljho","#0B570F"],["Rathian","#3a9b3f"],
     ["Astalos","#14503d"],["Zinogre","#2dae85"],
     ["Zamtrios","#005984"],["Plesioth","#0080c1"],
@@ -44,6 +44,13 @@
     ["K. Daora","#505358","Kushala Daora"],["Valstrax","#aeb5c1"],
     ["Forbidden","#1E2025","Question Mark"],
   ];
+  // Tigrex and Rajang were amber (#C8A319 / #F1D364) until they were re-cut as the yellow
+  // rotation of Teostra and Rathalos. A saved theme is a bare hex, so anyone sitting on the
+  // old pair would keep a colour that is no longer in the list, so it never picks up the change
+  // and anything keyed off the hex (the selected swatch, the theme's icon) stops matching. Remap
+  // on read, not on write: the stale value is already in localStorage on every device that chose it.
+  const LEGACY_HEX = { "#C8A319": "#57470B", "#F1D364": "#B59417" };
+  const migrateHex = (h) => (h && LEGACY_HEX[h.toUpperCase()]) || h;
   const COLORS_HEX = Object.fromEntries(COLORS.map(([name, hex]) => [hex.toUpperCase(), name]));
   const COLORS_ICON = Object.fromEntries(COLORS.filter(c => c[2]).map(([name,,icon]) => [name, icon]));
 
@@ -1750,7 +1757,7 @@
     buildColourLegend();
     $("gridSize").value = String(cfg.size);
     syncFreeSpace();
-    applyTheme(localStorage.getItem(THEME_KEY) || "#1E2025");
+    applyTheme(migrateHex(localStorage.getItem(THEME_KEY)) || "#1E2025");
 
     $("gridSize").addEventListener("change", () => {
       cfg.size = parseInt($("gridSize").value, 10);
