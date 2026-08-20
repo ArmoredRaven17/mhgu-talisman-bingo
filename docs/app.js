@@ -30,46 +30,69 @@
   // ── Themes (ported from MHGU Bingo / the Quest Randomizer) ─────────────────
   const COLORS = [
     ["Teostra","#570B0B"],["Rathalos","#b51717"],
-    ["Tetsucabra","#c65900"],["Agnaktor","#fc933e"],
-    ["Tigrex","#574916"],["Rajang","#BEA031"],
-    ["Deviljho","#0B570F"],["Rathian","#3a9b3f"],
-    ["Astalos","#14503d"],["Zinogre","#2dae85"],
+    ["Tetsucabra","#68360D"],["Agnaktor","#B5590D"],
+    ["Tigrex","#574916"],["Rajang","#9C8328"],
+    ["Deviljho","#0B570F"],["Rathian","#39993E"],
+    ["Astalos","#14503d"],["Zinogre","#279773"],
     ["Zamtrios","#005984"],["Plesioth","#0080c1"],
     ["Brachydios","#0B2757"],["Lagiacrus","#0b3f97"],
     ["G. Magala","#1F0B57","Gore Magala"],["Nerscylla","#4e2fa2"],
     ["Y. Garuga","#62008f","Yian Garuga"],["Chameleos","#8e50ab"],
-    ["Mizutsune","#D84696"],["Congalala","#ce79a8"],
+    ["Mizutsune","#D4358C"],["Congalala","#C8679D"],
     ["Duramboros","#5a411f"],["Diablos","#997c54"],
-    ["Barroth","#B57C45"],["Bulldrome","#cfaa87"],
-    ["K. Daora","#505358","Kushala Daora"],["Valstrax","#aeb5c1"],
+    ["Barroth","#835A32"],["Bulldrome","#B17A47"],
+    ["K. Daora","#505358","Kushala Daora"],["Valstrax","#7C879B"],
     ["Forbidden","#1E2025","Question Mark"],
   ];
-  // Tigrex and Rajang are the yellow rotation of Astalos and Zinogre: each takes its source's
-  // saturation and lightness, with the hue moved to the palette's yellow slot at 47°, then both
-  // lift 9%. They were amber (#C8A319 / #F1D364) before any of this, and were briefly cut off
-  // Teostra and Rathalos instead — the teal pair is the less saturated of the two, so the yellows
-  // it gives are softer.
+  // THE PALETTE'S ONE INVARIANT: every theme takes white text and a white checkbox tick.
   //
-  // The lift has a ceiling, and it is not a taste call. A native checkbox takes accent-color from
-  // --accent, which is darken(hex, .70), and the browser picks the tick glyph itself: white below
-  // relative luminance .1791 and BLACK above it. Rajang lands at .1669; 14% would put it at .1834
-  // and leave one theme ticking in black while the other 26 tick in white. That is why the
-  // original #F1D364 had black ticks — its accent measured .4655.
+  // Both come off the same number. A native checkbox takes accent-color from the theme and the
+  // browser picks the tick glyph itself — white below relative luminance .1791, black above it —
+  // and applyTheme picks the text direction the same way, light text while the draw block's
+  // ground sits under that same .1791. The ground is the lighter of the two surfaces (a 60/40
+  // composite of darken(hex,.80) and darken(hex,.95), against the tick's darken(hex,.70)), so it
+  // is strictly the binding one: hold the ground under the line and the tick follows for free.
+  //
+  // Every theme is under it now, so the light-text branch never fires and no theme renders the
+  // other way round from the rest. Worst white-on-ground in the palette is 4.73:1, clearing AA.
+  // The one exemption is the Quest Randomizer's Gypceros, a white gag theme whose whole joke is
+  // tripping the light branch; it is not in this list anywhere else.
+  //
+  // A NEW OR RE-CUT COLOUR HAS TO CLEAR THIS. A swatch that fails is not a slightly-too-bright
+  // swatch, it is a theme that inverts against every other one.
+  //
+  // Eight came down to get there — Rajang, Rathian, Zinogre, Mizutsune, Congalala, Barroth,
+  // Bulldrome and Valstrax — by lightness alone, so each keeps its own hue and saturation. Where
+  // capping the light member on its own would have squashed a pair onto one lightness, the dark
+  // partner came down by the same factor instead of the pair collapsing: that is why Barroth
+  // moved with Bulldrome, and Mizutsune with Congalala.
+  //
+  // Two pairs are re-cuts of other pairs, keeping their own slot on the wheel and taking the
+  // source pair's saturation and lightness, member for member:
+  //
+  //   Tigrex / Rajang        <- Astalos / Zinogre,      at the yellow slot (47°)
+  //   Tetsucabra / Agnaktor  <- Brachydios / Lagiacrus, at the orange slot (27°), both lifted 20%
+  //
+  // The earth tones (Duramboros, Diablos, Barroth, Bulldrome) share the 27–47° stretch with both
+  // of those pairs by design. Swatches sitting close together in there is expected and is not a
+  // collision to design out.
   //
   // A saved theme is a bare hex, so anyone sitting on a retired one keeps a colour that is no
   // longer in the list: it never picks up the change, and anything keyed off the hex (the selected
   // swatch, the theme's icon) stops matching. Remap on read, not on write — the stale value is
-  // already in localStorage on every device that chose it.
-  //
-  // Three generations to catch, and every one of them shipped: the amber to all nine apps,
-  // #57470B / #B59417 to Talisman Bingo alone, #5E4D0C / #C39F19 to all nine again. The map is
-  // kept identical everywhere regardless of which app released what — this palette is hand-copied
-  // with no shared source, and matching it everywhere is cheaper to hold in step than trimming
-  // each copy to its own history.
+  // already in localStorage on every device that chose it. Only hexes that actually shipped are
+  // listed; cuts that never left the working tree are not, because no device can hold them. The
+  // map is kept identical in all nine apps regardless of which app released what, because this
+  // palette is hand-copied with no shared source.
   const LEGACY_HEX = {
-    "#C8A319": "#574916", "#F1D364": "#BEA031",   // the original amber
-    "#57470B": "#574916", "#B59417": "#BEA031",   // off Teostra/Rathalos, before the lift
-    "#5E4D0C": "#574916", "#C39F19": "#BEA031",   // off Teostra/Rathalos, lifted
+    "#C8A319": "#574916", "#57470B": "#574916", "#5E4D0C": "#574916",           // Tigrex
+    "#F1D364": "#9C8328", "#B59417": "#9C8328", "#C39F19": "#9C8328",           // Rajang
+    "#BEA031": "#9C8328",
+    "#C65900": "#68360D", "#FC933E": "#B5590D",                                 // Tetsucabra, Agnaktor
+    "#3A9B3F": "#39993E", "#2DAE85": "#279773",                                 // Rathian, Zinogre
+    "#D84696": "#D4358C", "#CE79A8": "#C8679D",                                 // Mizutsune, Congalala
+    "#B57C45": "#835A32", "#CFAA87": "#B17A47",                                 // Barroth, Bulldrome
+    "#AEB5C1": "#7C879B",                                                       // Valstrax
   };
   const migrateHex = (h) => (h && LEGACY_HEX[h.toUpperCase()]) || h;
   const COLORS_HEX = Object.fromEntries(COLORS.map(([name, hex]) => [hex.toUpperCase(), name]));
