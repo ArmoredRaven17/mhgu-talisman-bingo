@@ -31,7 +31,7 @@
   const COLORS = [
     ["Teostra","#570B0B"],["Rathalos","#b51717"],
     ["Tetsucabra","#c65900"],["Agnaktor","#fc933e"],
-    ["Tigrex","#5E4D0C"],["Rajang","#C39F19"],
+    ["Tigrex","#574916"],["Rajang","#BEA031"],
     ["Deviljho","#0B570F"],["Rathian","#3a9b3f"],
     ["Astalos","#14503d"],["Zinogre","#2dae85"],
     ["Zamtrios","#005984"],["Plesioth","#0080c1"],
@@ -44,28 +44,32 @@
     ["K. Daora","#505358","Kushala Daora"],["Valstrax","#aeb5c1"],
     ["Forbidden","#1E2025","Question Mark"],
   ];
-  // Tigrex and Rajang were amber (#C8A319 / #F1D364) until they were re-cut as the yellow
-  // rotation of Teostra and Rathalos — same saturation and lightness as the reds, hue moved to
-  // the palette's yellow slot at 47°, then both lifted 8% so the pair is not as dark as its
-  // source. 8% is a ceiling, not a taste call. A native checkbox takes accent-color from
-  // --accent, which is darken(hex, .70), and the browser picks the tick glyph itself: white
-  // below relative luminance .1791 and BLACK above it. Rajang lands at .1695 and is over the
-  // line by a 10% lift, which would leave one theme ticking in black while the other 26 tick in
-  // white. That is why the old #F1D364 had black ticks — its accent measured .4655.
+  // Tigrex and Rajang are the yellow rotation of Astalos and Zinogre: each takes its source's
+  // saturation and lightness, with the hue moved to the palette's yellow slot at 47°, then both
+  // lift 9%. They were amber (#C8A319 / #F1D364) before any of this, and were briefly cut off
+  // Teostra and Rathalos instead — the teal pair is the less saturated of the two, so the yellows
+  // it gives are softer.
+  //
+  // The lift has a ceiling, and it is not a taste call. A native checkbox takes accent-color from
+  // --accent, which is darken(hex, .70), and the browser picks the tick glyph itself: white below
+  // relative luminance .1791 and BLACK above it. Rajang lands at .1669; 14% would put it at .1834
+  // and leave one theme ticking in black while the other 26 tick in white. That is why the
+  // original #F1D364 had black ticks — its accent measured .4655.
   //
   // A saved theme is a bare hex, so anyone sitting on a retired one keeps a colour that is no
   // longer in the list: it never picks up the change, and anything keyed off the hex (the selected
   // swatch, the theme's icon) stops matching. Remap on read, not on write — the stale value is
   // already in localStorage on every device that chose it.
   //
-  // Two generations to catch, not one. Talisman Bingo shipped the unlifted #57470B / #B59417 pair
-  // before the 8% went on, so those hexes reached real devices and have to be remapped as well.
-  // The map is kept identical across all the apps even where only the amber ever shipped: this
-  // palette is hand-copied with no shared source, and matching it everywhere is cheaper to hold
-  // in step than trimming each copy to exactly what that app released.
+  // Three generations to catch, and every one of them shipped: the amber to all nine apps,
+  // #57470B / #B59417 to Talisman Bingo alone, #5E4D0C / #C39F19 to all nine again. The map is
+  // kept identical everywhere regardless of which app released what — this palette is hand-copied
+  // with no shared source, and matching it everywhere is cheaper to hold in step than trimming
+  // each copy to its own history.
   const LEGACY_HEX = {
-    "#C8A319": "#5E4D0C", "#F1D364": "#C39F19",   // the original amber
-    "#57470B": "#5E4D0C", "#B59417": "#C39F19",   // the yellow rotation, before the lift
+    "#C8A319": "#574916", "#F1D364": "#BEA031",   // the original amber
+    "#57470B": "#574916", "#B59417": "#BEA031",   // off Teostra/Rathalos, before the lift
+    "#5E4D0C": "#574916", "#C39F19": "#BEA031",   // off Teostra/Rathalos, lifted
   };
   const migrateHex = (h) => (h && LEGACY_HEX[h.toUpperCase()]) || h;
   const COLORS_HEX = Object.fromEntries(COLORS.map(([name, hex]) => [hex.toUpperCase(), name]));
@@ -1581,8 +1585,8 @@
   }
 
   // ── Log check ──────────────────────────────────────────────────────────────
-  // Hold to glow every unmarked square that ANYTHING in the log already satisfied; release
-  // and it goes away. The normal hint only ever covers the newest draw, which is right for
+  // Toggle on to glow every unmarked square that ANYTHING in the log already satisfied; toggle
+  // off and it goes away. The normal hint only ever covers the newest draw, which is right for
   // playing along but useless for someone who sat down mid-game or looked away for ten calls.
   //
   // Computed from card.log rather than card.eligible, even though eligible reaches further
@@ -1620,7 +1624,9 @@
         if (keep.indexOf(i) === -1) cells[i].classList.remove("hinted");
       }
     }
-    $("logCheckBtn").classList.toggle("held", on);
+    const btn = $("logCheckBtn");
+    btn.classList.toggle("on", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
   }
 
   // Which seat you are at is DERIVED, never chosen. It used to be a two-tab switcher, and the
@@ -1865,18 +1871,15 @@
     });
     // Press and hold, by pointer or by key. blur is in the list because releasing the mouse
     // outside the button, or tabbing away mid-hold, otherwise leaves the board stuck glowing.
-    const lc = $("logCheckBtn");
-    for (const ev of ["pointerdown"]) lc.addEventListener(ev, (e) => { e.preventDefault(); setLogCheck(true); });
-    for (const ev of ["pointerup", "pointerleave", "pointercancel", "blur"]) lc.addEventListener(ev, () => setLogCheck(false));
-    lc.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLogCheck(true); }
-    });
-    lc.addEventListener("keyup", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLogCheck(false); }
-    });
-    // A re-render replaces every cell node, so a hold spanning one would leave the flag set
-    // with nothing lit. Cheap insurance against that desync.
-    window.addEventListener("blur", () => setLogCheck(false));
+    // A toggle, not a press-and-hold. Holding meant you could not scroll the log, mark a
+    // square, or look anywhere else while the check was up -- and every square it lights is
+    // one you then have to go and click, so letting go in order to do that defeated the point.
+    //
+    // Plain click, same as the Angle and Orbit locks in Weapon Trees. It also drops the
+    // pointerup/leave/cancel/blur handlers, which are what made the held version fragile:
+    // releasing off the button or tabbing away mid-hold could leave the flag set with nothing
+    // lit.
+    $("logCheckBtn").addEventListener("click", () => setLogCheck(!logCheckOn));
 
     $("peNext").addEventListener("click", async () => {
       // Ask the SESSION where the Gamemaster is and catch up to that. It used to take a typed

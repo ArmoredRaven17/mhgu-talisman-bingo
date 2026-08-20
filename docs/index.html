@@ -8,7 +8,7 @@
 <meta name="description" content="A bingo card of talisman conditions — keep drawing charms until one fills the line you needed.">
 <link rel="icon" type="image/png" href="assets/TalismanIcons/icon_talisman_r10.png">
 <!-- Bump ?v= on any styles/app/data change so browsers fetch fresh copies (no hard-refresh needed) -->
-<link rel="stylesheet" href="styles.css?v=54">
+<link rel="stylesheet" href="styles.css?v=55">
 </head>
 <body>
 <div id="app">
@@ -48,8 +48,8 @@
         <div id="lastCharm" class="last-charm"></div>
         <p class="hint log-head" id="logTitle">Recent draws</p>
         <div id="drawLog" class="draw-log"></div>
-        <button id="logCheckBtn" class="btn tiny block" type="button"
-                title="Hold to glow every unmarked square the log has already covered">Log Check</button>
+        <button id="logCheckBtn" class="btn tiny block" type="button" aria-pressed="false"
+                title="Glow every unmarked square the log has already covered">Log Check</button>
       </div>
 
       <section class="panel" data-open="true">
@@ -78,8 +78,8 @@
           <label class="chk hidden"><input type="checkbox" id="showReroll">Reroll button on squares</label>
           <label class="chk"><input type="checkbox" id="softHighlight" checked>Highlight matching squares</label>
           <p class="hint">Squares can only be marked once a draw has actually matched them, so a
-             BINGO is always one the calls justify. Hold <strong>Log Check</strong> under the log
-             to see everything the calls so far have covered.</p>
+             BINGO is always one the calls justify. Turn on <strong>Log Check</strong> under the
+             log to see everything the calls so far have covered.</p>
           <p class="hint">A drawn talisman glows the squares it would satisfy. Marking is
              always yours &mdash; the glow only points.</p>
           <label class="field">Enlarge squares on hover
@@ -330,6 +330,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=80"></script>
+<script src="app.js?v=82"></script>
 </body>
 </html>

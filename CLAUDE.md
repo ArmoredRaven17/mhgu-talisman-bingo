@@ -228,10 +228,17 @@ it was meant to keep honest. Followers now receive the draws themselves: polling
 **Sync to Current Draw** catches up by hand. The set fills on every screen, not just the caller's.
 
 **Log Check is the other half of it.** A locked board is only fair if you can see what the calls
-have already covered. Hold the button under the log and every unmarked square anything in the log
-satisfies glows; release and it goes. It is a peek, not state — it toggles the class directly
+have already covered. Toggle the button under the log and every unmarked square anything in the log
+satisfies glows; toggle it off and it goes. It is a peek, not state — it toggles the class directly
 rather than writing `card.hint`, so it is never saved and never disturbs the current draw's glow
 underneath.
+
+**It is a toggle, not a press-and-hold, and that changed.** Holding meant you could not scroll the
+log or mark a square while the check was up — and every square it lights is one you then have to go
+and click, so letting go in order to do that defeated the point. It also dropped the
+pointerup/leave/cancel/blur handlers that made the held version fragile: releasing off the button or
+tabbing away mid-hold could leave the flag set with nothing lit. Same shape as the Angle and Orbit
+locks in `mhgu-weapon-trees` — plain click, `.on` for the active state.
 
 It reads **`card.log`, not `card.eligible`**, even though eligible reaches further back. A check
 that shows a square you cannot justify from the visible log is worse than none. The cost is that it
