@@ -704,7 +704,7 @@
     if (card.last) {
       last.appendChild(charmNode(card.last.charm, card.last.hits, card.last.at));
       const note = document.createElement("div");
-      note.className = "charm-note";
+      note.className = "charm-note" + (card.last.hits ? " hit" : "");
       // Not "marked N squares" any more: the draw marks nothing, the player does. Claiming
       // otherwise is how a draw that lights one ring while reporting two reads as a bug.
       note.textContent = card.last.hits
@@ -885,7 +885,7 @@
   // Instead, walk down from a vivid lightness until white text clears WCAG AA. Every hue
   // reaches that eventually, so this always terminates with the lightest colour that is
   // still legible.
-  const WHITE = [255, 255, 255];
+  const WHITE = [255, 255, 255], BLACK = [0, 0, 0];
   function winColor(c) {
     const hue = (rgbToHsl(c)[0] + 0.5) % 1;
     for (let l = 0.60; l >= 0.20; l -= 0.01) {
@@ -913,6 +913,53 @@
   //
   // Lightening from the theme colour instead was the obvious alternative and fails outright
   // on the pale themes — lighten(#aeb5c1, .40) is near-white, and the button's text is white.
+  // Which seat you are in, as TEXT on the draw block. --cta and --win cannot serve here:
+  // both are searched for contrast against WHITE, because they are button fills that white
+  // text sits on top of. Used as text on a dark block they run to 1.00:1 -- --cta is exactly
+  // the background on Plesioth -- which is the same trap --accent fell into.
+  //
+  // Searched against --bg2, the block's own ground, like hintColor is against the well. The
+  // player takes the complementary hue so the two seats are told apart by colour and not only
+  // by the word.
+  function roleColor(c, complement) {
+    // The ground is NOT --bg2. The block paints a 60% --bg1 wash over a texture on top of it,
+    // so the text sits on something darker than bg2 -- which is why contrast measured against
+    // bg2 read "fine" while the themes looked muddy. Composite it the way CSS does.
+    const bg1 = darken(c, .80), bg2 = darken(c, .95);
+    const ground = [0, 1, 2].map((i) => Math.round(bg1[i] * 0.6 + bg2[i] * 0.4));
+
+    const [hue, sat] = rgbToHsl(c);
+    const h = complement ? (hue + 0.5) % 1 : hue;
+
+    // Direction is decided by the ground, not fixed. Most themes are dark and want light text,
+    // but the bright monsters (Rajang, Agnaktor, Bulldrome, Valstrax) give a light block where
+    // light text runs to 1.5:1 -- worse than anything this was meant to fix.
+    //
+    // Walk AWAY from the ground starting at mid lightness and take the first candidate that
+    // clears the target: as bright as it needs to be and no brighter, so saturation survives
+    // to tell the two seats apart.
+    const groundDark = contrast(ground, WHITE) > contrast(ground, BLACK);
+    const steps = [];
+    if (groundDark) for (let l = 0.50; l <= 0.97; l += 0.02) steps.push(l);
+    else            for (let l = 0.50; l >= 0.03; l -= 0.02) steps.push(l);
+
+    // AAA rather than AA: this is a short run of coloured text that has to read at a glance,
+    // and at 4.5 the dark themes looked dingy. Fall back through saturation, then to the plain
+    // extreme, which always clears AA -- the min-max over every possible ground is about 4.6.
+    let best = null, bestRatio = 0;
+    for (const target of [7, 4.5]) {
+      for (const s of [Math.max(sat, 0.72), 0.58, 0.44, 0.3, 0.16]) {
+        for (const l of steps) {
+          const cand = hslToRgb([h, s, l]);
+          const r = contrast(cand, ground);
+          if (r >= target) return cand;
+          if (r > bestRatio) { bestRatio = r; best = cand; }
+        }
+      }
+    }
+    return bestRatio >= 4.5 ? best : (groundDark ? WHITE : BLACK);
+  }
+
   function ctaColor(c) {
     const [hue, sat] = rgbToHsl(c);
     for (let l = 0.62; l >= 0.22; l -= 0.01) {
@@ -959,6 +1006,9 @@
     r.setProperty("--win",          css(winColor(c)));
     r.setProperty("--hint",         css(hintColor(c)));
     r.setProperty("--cta",          css(ctaColor(c)));
+    r.setProperty("--role-gm",      css(roleColor(c, false)));
+    r.setProperty("--role-player",  css(roleColor(c, true)));
+    r.setProperty("--match",        css(roleColor(c, true)));
     r.setProperty("--text",     "#ffffff");
     r.setProperty("--text-dim", "#fffffff5");
     r.setProperty("--line",     "rgba(11,8,8,0.12)");
