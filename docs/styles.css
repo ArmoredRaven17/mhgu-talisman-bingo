@@ -474,7 +474,15 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 .drawblock{
   display:flex;flex-direction:column;gap:6px;
   border:1px solid var(--line);border-radius:8px;padding:10px;
-  background:var(--well,#101216);
+  /* The same texture .panel-body uses, so the draw block reads as part of the sidebar rather
+     than a flat well dropped on top of it. Kept in step with that rule if it ever changes. */
+  background-color:var(--bg2);
+  background-image:
+    linear-gradient(color-mix(in srgb,var(--bg1) 60%,transparent),color-mix(in srgb,var(--bg1) 60%,transparent)),
+    url('assets/panel-body-bg.png');
+  background-size:contain 100%;
+  background-position:left center;
+  background-repeat:repeat;
 }
 /* Gutters. Every part of this block changes height as you play -- the charm goes from one
    line of prompt to an icon with two skills, the log fills from empty to scrolling -- and
