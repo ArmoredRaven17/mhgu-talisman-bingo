@@ -8,7 +8,7 @@
 <meta name="description" content="A bingo card of talisman conditions — keep drawing charms until one fills the line you needed.">
 <link rel="icon" type="image/png" href="assets/TalismanIcons/icon_talisman_r10.png">
 <!-- Bump ?v= on any styles/app/data change so browsers fetch fresh copies (no hard-refresh needed) -->
-<link rel="stylesheet" href="styles.css?v=19">
+<link rel="stylesheet" href="styles.css?v=47">
 </head>
 <body>
 <div id="app">
@@ -23,7 +23,7 @@
       <button id="seedCopy" class="btn tiny">Copy card</button>
       <button id="seedApply" class="btn tiny">Load</button>
     </div>
-    <button id="newCardBtn" class="icon-btn" title="New Card" aria-label="New Card">&#8635;</button>
+    <button id="newCardBtn" class="btn tiny" title="Roll a fresh card">New Card</button>
     <button id="twitchBtn" class="icon-btn" title="Twitch &amp; live sessions" aria-label="Twitch and live sessions">
       <span id="liveDot" class="live-dot hidden" aria-hidden="true"></span>
       <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="#9146FF" aria-hidden="true"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0Zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>
@@ -36,12 +36,26 @@
   <main class="layout">
     <!-- Sidebar: card config -->
     <aside class="sidebar">
-      <button id="generateBtn" class="btn block accent">New Card</button>
-      <p id="poolStatus" class="hint"></p>
+      <!-- Draw. A plain block, NOT a .panel: the panel handler is an accordion that closes
+           every panel before toggling the clicked one, so a .panel here could never stay open. -->
+      <div class="drawblock">
+        <div class="draw-controls" id="drawPanel">
+            <p class="role-line">You are the <strong id="roleName">Gamemaster</strong></p>
+            <button id="drawBtn" class="btn accent block">Draw Talisman</button>
+            <button id="peNext" class="btn accent block hidden">Sync to Current Draw</button>
+            <p id="peNote" class="hint"></p>
+          </div>
+        <div id="lastCharm" class="last-charm"></div>
+        <p class="hint log-head" id="logTitle">Recent draws</p>
+        <div id="drawLog" class="draw-log"></div>
+        <button id="logCheckBtn" class="btn tiny block" type="button"
+                title="Hold to glow every unmarked square the log has already covered">Log Check</button>
+      </div>
 
       <section class="panel" data-open="true">
         <button class="panel-head">Card Setup <span class="chev">&#9662;</span></button>
         <div class="panel-body">
+          <p id="poolStatus" class="hint"></p>
           <label class="field">Grid size
             <select id="gridSize">
               <option value="3">3 &times; 3</option>
@@ -56,8 +70,13 @@
           </label>
           <label class="chk"><input type="checkbox" id="freeSpace" checked>Free space in the centre</label>
           <p class="hint">Only odd sizes can have a free space.</p>
-          <label class="chk"><input type="checkbox" id="showReroll" checked>Reroll button on squares</label>
+          <!-- Reroll is hidden for now. The element stays so the settings wiring keeps a
+               node to read, and so turning it back on is one class away. -->
+          <label class="chk hidden"><input type="checkbox" id="showReroll">Reroll button on squares</label>
           <label class="chk"><input type="checkbox" id="softHighlight" checked>Highlight matching squares</label>
+          <label class="chk"><input type="checkbox" id="lockUnmatched" checked>Only allow marking squares that have been called</label>
+          <p class="hint">Hold <strong>Log Check</strong> under the log to see everything the
+             calls so far have already covered.</p>
           <p class="hint">A drawn talisman glows the squares it would satisfy. Marking is
              always yours &mdash; the glow only points.</p>
           <label class="field">Enlarge squares on hover
@@ -76,7 +95,9 @@
         </div>
       </section>
 
-      <section class="panel" data-open="true">
+      <!-- Closed on load. The accordion allows exactly one open panel, so shipping two open
+           made the first click on either heading collapse both. -->
+      <section class="panel" data-open="false">
         <button class="panel-head">Card Pools <span class="chev">&#9662;</span></button>
         <div class="panel-body">
           <p class="hint">What goes in the squares. Weight biases how often a pool is drawn.</p>
@@ -86,26 +107,6 @@
 
 
 
-      <section class="panel hidden" id="manualPanel" data-open="false">
-        <button class="panel-head">Enter a talisman <span class="chev">&#9662;</span></button>
-        <div class="panel-body">
-          <p class="hint" id="peManualNote">For when you have lost your place, or the Gamemaster
-             is calling from the game rather than from here.</p>
-          <label class="pe-row"><span>Talisman</span>
-            <select id="peRarity" class="sel"></select></label>
-          <label class="pe-row"><span>Skill 1</span>
-            <select id="peSkill1" class="sel"></select></label>
-          <label class="pe-row"><span>Points</span>
-            <select id="pePts1" class="sel"></select></label>
-          <label class="pe-row"><span>Skill 2</span>
-            <select id="peSkill2" class="sel"></select></label>
-          <label class="pe-row"><span>Points</span>
-            <select id="pePts2" class="sel"></select></label>
-          <label class="pe-row"><span>Slots</span>
-            <select id="peSlots" class="sel"></select></label>
-          <button id="peAdd" class="btn block">Add Talisman</button>
-        </div>
-      </section>
 
       <button id="resetBtn" class="btn block">Reset</button>
     </aside>
@@ -117,36 +118,6 @@
         <div id="bingoCard" class="bingo-card"></div>
       </div>
       <p id="status" class="status" aria-live="polite"></p>
-
-      <div class="modebar" role="tablist" aria-label="Who you are at this table">
-        <button id="tabGm" class="modetab" role="tab" aria-selected="true">Gamemaster</button>
-        <button id="tabPlayer" class="modetab" role="tab" aria-selected="false">Player</button>
-      </div>
-
-      <div class="drawbar">
-        <div class="draw-controls" id="gmPanel" role="tabpanel" aria-labelledby="tabGm">
-          <button id="drawBtn" class="btn accent block">Draw Talisman</button>
-          <p class="draw-count">Draws: <strong id="drawCount">0</strong></p>
-          <p id="drawScore" class="hint"></p>
-          <p id="gmLiveStatus" class="hint"></p>
-        </div>
-
-        <div class="draw-controls player-entry hidden" id="playerPanel" role="tabpanel" aria-labelledby="tabPlayer">
-          <button id="peNext" class="btn accent block">Next Talisman</button>
-          <p class="draw-count">Talismans seen: <strong id="peCount">0</strong></p>
-          <p class="hint" id="peManualHint">Everyone in a session draws the same talismans in the
-             same order, so press this once each time the Gamemaster calls one. Stay on their
-             number — or join above and let it follow along by itself.</p>
-          <p id="peManualPointer" class="hint">Lost your place? Use <strong>Enter a
-             talisman</strong> in the sidebar.</p>
-          <p id="peNote" class="hint"></p>
-        </div>
-        <div id="lastCharm" class="last-charm"></div>
-        <div class="draw-log-wrap">
-          <p class="hint" id="logTitle">Recent draws</p>
-          <div id="drawLog" class="draw-log"></div>
-        </div>
-      </div>
     </section>
   </main>
 </div>
@@ -213,10 +184,6 @@
        joining need no account at all.</strong></p>
     <p>If the connection drops, nothing is lost: the session alone determines every talisman, so
        the manual controls come back and you can keep playing off what the Gamemaster calls.</p>
-
-    <h3>Rerolling</h3>
-    <p>Hover a square and hit <strong>&#8635;</strong> to swap just that condition. Once you
-       do, the seed no longer rebuilds the card &mdash; it's marked <em>edited</em>.</p>
 
     <p class="hint">Progress and settings are saved in this browser. Printing (Ctrl&#8209;P)
        gives a clean black-and-white card.</p>
@@ -360,6 +327,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=38"></script>
+<script src="app.js?v=58"></script>
 </body>
 </html>

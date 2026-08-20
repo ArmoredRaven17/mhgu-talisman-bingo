@@ -249,22 +249,31 @@
   let view = null;          // the card's pruned roll table; rebuilt on load, never serialised
   let bags = null;          // leftover goals per pool, for per-square reroll
   let usedKeys = new Set();
-  let showReroll = true;
+  // Hidden for now. Read as a hard-coded literal rather than from settings, for the same
+  // reason lockUnmatched is: anyone who ticked the box while the control was live has
+  // showReroll:true in localStorage, and honouring that with no control on the page would put
+  // a button on their squares they could never turn off. The key is no longer written, so it
+  // clears itself on the next settings save.
+  let showReroll = false;
   let softHighlight = true;
   // HIDDEN, and forced off. The mechanism below works and is left intact, but the control is
-  // not offered yet because it only holds up for the person pressing Draw.
+  // Marking is gated on the draw history: a square only becomes claimable once some talisman
+  // has actually satisfied it. Unlike MHGU Bingo, whose squares are hunt objectives only the
+  // player can adjudicate, every square here is a condition on a talisman and the app produced
+  // the talisman -- so the draw history is an authoritative caller's board.
   //
-  // In a real game one person calls and everyone else just watches their own card. Those other
-  // devices never draw, so their `eligible` set stays empty and EVERY square locks forever —
-  // the check breaks precisely for the players it was meant to keep honest. Re-enabling it
-  // needs the draw to reach the other screens first.
+  // This was switched off for a long time, and the objection has now expired. It was that one
+  // person calls while everyone else only watches, so the other devices never draw, their
+  // `eligible` stays empty and every square locks forever. Followers now receive the draws
+  // themselves -- polling syncs them, and Sync to Current Draw catches up by hand -- so the
+  // set fills on every screen, not just the caller's.
   //
-  // Read as a literal rather than from settings on purpose: anyone who ticked the box while it
-  // was live has `lockUnmatched: true` in localStorage, and honouring that with no control on
-  // the page would strand them with an uncompletable card.
-  let lockUnmatched = false;
+  // Log Check is the other half: a locked board is only fair if you can see what the calls
+  // have already covered without hunting through 50 log entries.
+  let lockUnmatched = true;
   // "gm" rolls talismans here; "player" types in what someone else called. Persisted, because
   // which one you are is a property of your seat at the table, not of the card.
+  // Derived from the session by currentRole(); never set by the user.
   let mode = "gm";
 
   const TIER_PAIRS = TIERS.map((t) => [t, TIER_W[t]]);
@@ -363,7 +372,6 @@
         wasHosting ? "New card — the old session ended here. Start a new one when ready."
                    : "New card — you have left that session.");
     }
-    if (mode === "player") buildEntryForm();
     renderCard();
     saveCard();
     renderTwitch();
@@ -418,7 +426,7 @@
   // here, a live session syncing a draw number off the Worker, or a player typing in what was
   // called across the table. All three must be indistinguishable from this point on -- any
   // second path is a place for the modes to drift apart.
-  function applyCharm(charm, typed) {
+  function applyCharm(charm) {
     if (!charm) return null;
     // Two sets, and the difference matters. `hint` is what to go click NOW, so it skips
     // squares already marked. `eligible` is every square ANY draw has ever satisfied, and it
@@ -434,8 +442,8 @@
     card.draws++;
     card.eligible = [...eligible];
     card.hint = hint;
-    card.last = { charm: charm, hits: hint.length };
-    card.log.unshift({ charm: charm, hits: hint.length, at: card.draws, typed: !!typed });
+    card.last = { charm: charm, hits: hint.length, at: card.draws };
+    card.log.unshift({ charm: charm, hits: hint.length, at: card.draws });
     if (card.log.length > 50) card.log.length = 50;
     return { charm: charm, hits: hint };
   }
@@ -456,41 +464,30 @@
   function drawOnce() {
     if (!card || isComplete()) return null;
     const charm = drawAt(card.draws + 1);
-    return charm ? applyCharm(charm, false) : null;
+    return charm ? applyCharm(charm) : null;
   }
 
-  // Undo a mis-entered talisman. Only offered on the Player tab: a typo is a player problem,
-  // whereas a Gamemaster deleting a roll they didn't like is just cheating with extra steps.
+  // Replay the card's own draw stream and re-derive which squares it has legitimately made
+  // claimable. Cheap enough to run on load: a few hundred pure rolls against 25 conditions.
   //
-  // Everything newer shifts down a number so the log stays sequential. card.eligible is left
-  // alone deliberately -- with the marking gate disabled it has no effect, and rebuilding it
-  // from the log would be wrong anyway, since the log only keeps the last 50 draws.
-  function removeDraw(at) {
+  // Nothing removes a draw any more, so this is no longer a repair for deletion. It is a
+  // repair for cards SAVED while deletion existed: those carry an eligible set inflated by
+  // draws that were taken back, and with marking now gated that set is the difference between
+  // a locked square and a free one. Running it on restore heals them.
+  function rebuildEligible() {
     if (!card) return;
-    // Not while following a session: this renumbers the log and decrements card.draws,
-    // which would put the follower permanently out of step with the server's count.
-    if (live && !live.mine && !liveLost) return;
-    const i = card.log.findIndex((e) => e.at === at);
-    if (i < 0) return;
-    card.log.splice(i, 1);
-    for (const e of card.log) if (e.at > at) e.at--;
-    card.draws = Math.max(0, card.draws - 1);
-    const newest = card.log[0];
-    if (newest) {
-      const hint = [];
-      for (let j = 0; j < card.cells.length; j++) {
-        const cell = card.cells[j];
-        if (!cell.cond || card.marked.has(j)) continue;
-        if (satisfies(newest.charm, cell.cond)) hint.push(j);
+    const set = new Set();
+    for (let n = 1; n <= card.draws; n++) {
+      const charm = drawAt(n);
+      if (!charm) break;
+      for (let i = 0; i < card.cells.length; i++) {
+        const cell = card.cells[i];
+        if (cell.cond && !set.has(i) && satisfies(charm, cell.cond)) set.add(i);
       }
-      card.hint = hint;
-      card.last = { charm: newest.charm, hits: newest.hits };
-    } else {
-      card.hint = [];
-      card.last = null;
     }
-    renderCard();
-    saveCard();
+    // Anything already marked stays claimable, so an unmark can always be redone.
+    for (const i of card.marked) set.add(i);
+    card.eligible = [...set];
   }
 
   const isEligible = (i) =>
@@ -538,6 +535,8 @@
     const wrap = $("bingoCard");
     wrap.textContent = "";
     wrap.style.setProperty("--n", card.cfg.size);
+    // A render replaces every cell node, so a hold spanning one has to re-apply itself.
+    const logCheckSet = logCheckOn ? logCheckSquares() : [];
 
     card.cells.forEach((cell, i) => {
       const el = document.createElement("div");
@@ -548,6 +547,7 @@
       // The glow says "this one" — it never marks. Only the player marks, and marking is
       // what swaps the glow for the filled state.
       if (softHighlight && card.hint && card.hint.indexOf(i) > -1) el.classList.add("hinted");
+      if (logCheckOn && logCheckSet.indexOf(i) > -1) el.classList.add("hinted");
 
       if (cell.icon) {
         const img = document.createElement("img");
@@ -643,7 +643,7 @@
   // ── The draw panel ─────────────────────────────────────────────────────────
   // Renders the charm the way the game would show it: rarity icon, talisman name, slot
   // pips, then one line per skill.
-  function charmNode(charm, hits) {
+  function charmNode(charm, hits, at) {
     const wrap = document.createElement("div");
     wrap.className = "charm";
     if (ROLL.isGod(charm)) wrap.classList.add("god");
@@ -659,22 +659,39 @@
     const body = document.createElement("div");
     body.className = "charm-body";
 
+    // Same field order as a log row -- number and name, skills, slots -- so the talisman you
+    // just drew and the same talisman five draws later read identically. They used to differ
+    // in both shape and slot notation, which made the log look like a different data source.
     const head = document.createElement("div");
     head.className = "charm-name";
-    head.textContent = charmName(charm.r);
-    const pips = document.createElement("span");
-    pips.className = "charm-slots";
-    pips.textContent = charm.s ? "◈".repeat(charm.s) : "—";
-    pips.title = charm.s + (charm.s === 1 ? " slot" : " slots");
-    head.appendChild(pips);
+    if (at != null) {
+      const n = document.createElement("span");
+      n.className = "charm-n";
+      n.textContent = "#" + at;
+      head.appendChild(n);
+    }
+    const nm = document.createElement("span");
+    nm.textContent = charmName(charm.r);
+    head.appendChild(nm);
     body.appendChild(head);
 
-    for (const sk of charm.k) {
+    // Always two skill lines, even when the talisman has one. A charm with no second skill is
+    // the common case, and letting the block shrink meant the slots and the match count moved
+    // up a line between draws -- so the two fields you actually read were never in the same
+    // place twice running.
+    for (let i = 0; i < 2; i++) {
+      const sk = charm.k[i];
       const line = document.createElement("div");
-      line.className = "charm-skill" + (sk[1] < 0 ? " neg" : "");
-      line.textContent = treeName(sk[0]) + " " + (sk[1] > 0 ? "+" : "") + sk[1];
+      line.className = "charm-skill" + (sk ? (sk[1] < 0 ? " neg" : "") : " none");
+      line.textContent = sk ? treeName(sk[0]) + " " + (sk[1] > 0 ? "+" : "") + sk[1] : "N/A";
       body.appendChild(line);
     }
+
+    const pips = document.createElement("div");
+    pips.className = "charm-slots";
+    pips.textContent = SLOT_GLYPH[charm.s | 0] || SLOT_GLYPH[0];
+    pips.title = charm.s + (charm.s === 1 ? " slot" : " slots");
+    body.appendChild(pips);
 
     wrap.appendChild(body);
     return wrap;
@@ -682,24 +699,17 @@
 
   function renderDraw() {
     if (!card) return;
-    $("drawCount").textContent = card.draws.toLocaleString();
-    const score = $("drawScore");
-    const bits = [];
-    if (card.firstBingoDraw != null) bits.push("first line @ " + card.firstBingoDraw.toLocaleString());
-    if (card.blackoutDraw != null) bits.push("blackout @ " + card.blackoutDraw.toLocaleString());
-    score.textContent = bits.join(" · ");
-
     const last = $("lastCharm");
     last.textContent = "";
     if (card.last) {
-      last.appendChild(charmNode(card.last.charm, card.last.hits));
+      last.appendChild(charmNode(card.last.charm, card.last.hits, card.last.at));
       const note = document.createElement("div");
       note.className = "charm-note";
       // Not "marked N squares" any more: the draw marks nothing, the player does. Claiming
       // otherwise is how a draw that lights one ring while reporting two reads as a bug.
       note.textContent = card.last.hits
-        ? "matches " + card.last.hits + (card.last.hits === 1 ? " square" : " squares")
-        : "no match";
+        ? card.last.hits + (card.last.hits === 1 ? " Matching Tile" : " Matching Tiles")
+        : "No matching tiles";
       last.appendChild(note);
     } else {
       const p = document.createElement("p");
@@ -710,52 +720,61 @@
 
     const log = $("drawLog");
     log.textContent = "";
-    for (const entry of card.log) {
+    // The newest entry is the talisman shown above as the current draw, so the log starts at
+    // the one before it. Printing it in both places made the top of the block say the same
+    // thing twice, and the copy in the log is the one that moves -- it only becomes history
+    // once the next draw pushes it down.
+    for (const entry of card.log.slice(1)) {
       const row = document.createElement("div");
       row.className = "log-row" + (entry.hits ? " hit" : "");
+
+      // One field per line, in the order the player reads them: which draw and what it was,
+      // then each skill, then the slots, then what it means for their card. A single line
+      // could not hold a two-skill talisman without ellipsising the half worth reading, and
+      // stacking the skills also lines the "+N" up into a column down the log.
+      const head = document.createElement("div");
+      head.className = "log-line";
       const n = document.createElement("span");
       n.className = "log-n";
       n.textContent = "#" + entry.at;
-      const t = document.createElement("span");
-      t.className = "log-text";
-      t.textContent = charmName(entry.charm.r) + " · "
-        + entry.charm.k.map((s) => treeName(s[0]) + " " + (s[1] > 0 ? "+" : "") + s[1]).join(", ");
-      // Slots as filled/empty holes rather than a count, and in their own span rather than
-      // appended to the text: .log-text ellipsises when a two-skill charm is long, which
-      // would eat the slots exactly on the charms most worth reading.
-      const sl = document.createElement("span");
+      const nm = document.createElement("span");
+      nm.className = "log-name";
+      nm.textContent = charmName(entry.charm.r);
+      head.appendChild(n); head.appendChild(nm);
+      row.appendChild(head);
+
+      // Two lines always, for the same reason as the drawn talisman above: a fixed row height
+      // is what lets the eye scan straight down the slot glyphs and the match counts.
+      for (let i = 0; i < 2; i++) {
+        const kv = entry.charm.k[i];
+        const sk = document.createElement("div");
+        sk.className = "log-skill" + (kv ? "" : " none");
+        sk.textContent = kv ? treeName(kv[0]) + " " + (kv[1] > 0 ? "+" : "") + kv[1] : "N/A";
+        row.appendChild(sk);
+      }
+
+      const sl = document.createElement("div");
       sl.className = "log-slots";
       sl.textContent = SLOT_GLYPH[entry.charm.s | 0] || SLOT_GLYPH[0];
       sl.title = (entry.charm.s | 0) + ((entry.charm.s | 0) === 1 ? " slot" : " slots");
-      row.appendChild(n); row.appendChild(t); row.appendChild(sl);
+      row.appendChild(sl);
+
       // Was "+N", from when a draw added N marks by itself. It never meant a bonus or a
       // score — it is how many squares on THIS card the charm satisfies — and now that
       // marking is manual it is a to-do count, so it says so rather than implying the app
       // already did it.
-      if (entry.hits) {
-        const h = document.createElement("span");
-        h.className = "log-hit";
-        h.textContent = entry.hits + " to mark";
-        h.title = entry.hits + (entry.hits === 1 ? " square on your card matches" : " squares on your card match") + " this talisman";
-        row.appendChild(h);
-      }
-      if (mode === "player") {
-        const x = document.createElement("button");
-        x.type = "button";
-        x.className = "log-del";
-        x.textContent = "×";
-        x.title = "Remove this talisman";
-        x.setAttribute("aria-label", "Remove talisman " + entry.at);
-        x.addEventListener("click", () => removeDraw(entry.at));
-        row.appendChild(x);
-      }
+      const h = document.createElement("div");
+      h.className = "log-hit";
+      h.textContent = entry.hits
+        ? entry.hits + (entry.hits === 1 ? " Matching Tile" : " Matching Tiles")
+        : "No matching tiles";
+      row.appendChild(h);
+
       log.appendChild(row);
     }
 
     $("drawBtn").disabled = isComplete();
-    $("peAdd").disabled = isComplete();
     $("peNext").disabled = isComplete();
-    $("peCount").textContent = String(card.draws);
   }
 
   function updateSeedBar() {
@@ -805,7 +824,7 @@
       const need = opt.value * opt.value - ((cfg.free && opt.value % 2 === 1) ? 1 : 0);
       opt.disabled = need > avail && parseInt(opt.value, 10) !== cfg.size;
     }
-    $("generateBtn").disabled = avail === 0;
+    $("newCardBtn").disabled = avail === 0;
   }
   // ── Theme ──────────────────────────────────────────────────────────────────
   const hexRgb = (h) => { h = h.replace("#", ""); return [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16)); };
@@ -1166,7 +1185,9 @@
     // On the header button too: whether a session is running should not require opening a
     // modal to discover.
     $("liveDot").classList.toggle("hidden", !live);
+    $("liveDot").classList.toggle("lost", !!live && liveLost);
     $("twitchBtn").title = !live ? "Twitch & live sessions"
+      : liveLost ? "Lost the connection — draws are local until it returns"
       : (live.mine ? "LIVE — hosting a session" : "Following a live session");
     // Signing in is part of starting, not a prerequisite to be enforced up front — pressing
     // this signed out sends you to Twitch and you come back ready to go.
@@ -1218,7 +1239,7 @@
     while (card.draws < n && applied < 500) {
       const charm = drawAt(card.draws + 1);
       if (!charm) break;
-      applyCharm(charm, false);
+      applyCharm(charm);
       applied++;
     }
     if (applied) { renderCard(); saveCard(); }
@@ -1267,53 +1288,19 @@
 
   function renderLive() {
     const following = !!live && !liveLost && !live.mine;
-    // Hidden in ANY session, host included. A follower pressing it would run ahead of what
-    // was called; a HOST pressing it advances their card without posting, so they drift ahead
-    // of the session they are running. The Gamemaster draws from the Gamemaster tab, which is
-    // the only path that goes through the server.
-    $("peNext").classList.toggle("hidden", !!live);
-    $("peManualHint").classList.toggle("hidden", !!live);
-    // Manual entry lives in the sidebar so six dropdowns don't squeeze the board. It is for
-    // players only, and pointless while a session is feeding draws in automatically.
-    // Available in a live session too, but as a CHECKER there — see addTypedCharm. Hidden
-    // only when there is no player card in front of you.
-    $("manualPanel").classList.toggle("hidden", mode !== "player");
-    $("peManualPointer").classList.toggle("hidden", following);
+    // Shown only to a FOLLOWER in a session. It asks the server where the Gamemaster is and
+    // catches up to that, so it cannot outrun the caller. A host has no use for it — they set
+    // the number — and outside a session there is no number to ask for.
 
     // Everything about starting, sharing and ending a session now lives in the header's
     // Twitch modal — the one place titled "live sessions". This panel only reports state,
     // because a second copy of the control is how it ended up findable from neither.
     renderTwitch();
 
-    // Drawing belongs to the session owner. A follower who reached the Gamemaster tab could
-    // press Draw and advance their OWN card past the session -- not a cosmetic problem, a
-    // permanent desync, since card.draws is what syncTo() counts forward from.
-    // NOT gated on liveLost: losing the connection does not make you the session owner. The
-    // manual controls come back so you can play by ear, but drawing as Gamemaster would
-    // advance your own counter and desync you for good once the connection returns.
-    const isFollower = !!live && !live.mine;
-    const gmTab = $("tabGm");
-    gmTab.disabled = isFollower;
-    gmTab.classList.toggle("locked", isFollower);
-    gmTab.title = isFollower
-      ? "The Gamemaster draws for this session — your card follows along"
-      : "";
-
-    // And the mirror image: hosting means you are the caller, not a player. The Player tab
-    // only offers drawing and manual entry, both of which are the Gamemaster's job from the
-    // other tab, so leaving it open just invites the desync it took three guards to close.
-    const isHost = !!live && live.mine;
-    const plTab = $("tabPlayer");
-    plTab.disabled = isHost;
-    plTab.classList.toggle("locked", isHost);
-    plTab.title = isHost ? "You are running this session — draw from the Gamemaster tab" : "";
-    if (isHost && mode !== "gm") setMode("gm");
-
-    const checking = !!live;
-    $("peAdd").textContent = checking ? "Check Talisman" : "Add Talisman";
-    $("peManualNote") && ($("peManualNote").textContent = checking
-      ? "In a session this only checks a talisman against your card — the Gamemaster's draws are what count."
-      : "For when you have lost your place, or the Gamemaster is calling from the game rather than from here.");
+    // Drawing belongs to the session owner, and that is now enforced by the role rather than
+    // by disabling a tab: a follower's panel offers Sync where a caller's offers Draw. NOT
+    // gated on liveLost either -- losing the connection does not make you the session owner.
+    setMode();
 
     const hosting = !!live && live.mine && !liveLost;
     if (liveLost) {
@@ -1446,7 +1433,6 @@
       liveLost = false;
       rememberLive();
       // You joined someone's game; put you where you play it rather than making you find the tab.
-      if (mode !== "player") setMode("player");
       const caught = syncTo(st.n);
       renderLive();
       liveNote("joinStatus", caught
@@ -1460,117 +1446,78 @@
     }
   }
 
-  // ── Player entry ───────────────────────────────────────────────────────────
-  const PTS_MIN2 = -10, PTS_MAX = 13;
+  // ── Log check ──────────────────────────────────────────────────────────────
+  // Hold to glow every unmarked square that ANYTHING in the log already satisfied; release
+  // and it goes away. The normal hint only ever covers the newest draw, which is right for
+  // playing along but useless for someone who sat down mid-game or looked away for ten calls.
+  //
+  // Computed from card.log rather than card.eligible, even though eligible reaches further
+  // back. eligible is never rebuilt when a Player deletes a log entry, so it would keep
+  // glowing squares for a talisman that has been taken back -- and a check that shows you a
+  // square you cannot justify from the visible log is worse than no check. The log is what
+  // the button is named after and what the player can audit.
+  let logCheckOn = false;
 
-  function opt(sel, value, label) {
-    const o = document.createElement("option");
-    o.value = String(value); o.textContent = label;
-    sel.appendChild(o);
-    return o;
-  }
-
-  // The skill lists are the CARD'S KEPT TREES, not all 137. A talisman rolled for this card
-  // can only carry kept trees, so anything else would be unenterable anyway -- and 20 names is
-  // a usable dropdown where 137 is not.
-  function buildEntryForm() {
-    const keep = (card && card.keep) || [];
-    const trees = keep.slice().sort((a, b) => treeName(a).localeCompare(treeName(b)));
-
-    const rar = $("peRarity"); rar.textContent = "";
-    for (let r = 1; r <= 10; r++) opt(rar, r, charmName(r));
-    rar.value = "1";
-
-    const s1 = $("peSkill1"), s2 = $("peSkill2");
-    s1.textContent = ""; s2.textContent = "";
-    opt(s2, "", "(none)");
-    for (const id of trees) { opt(s1, id, treeName(id)); opt(s2, id, treeName(id)); }
-
-    // Slot 1 is never zero or negative: of the 248 legal first-skill rows in the tables, not
-    // one can roll below +1. Slot 2 straddles zero, and a 0-point second skill is dropped by
-    // the game as no second skill at all -- so it is "(none)" here rather than a 0.
-    const p1 = $("pePts1"); p1.textContent = "";
-    for (let v = 1; v <= PTS_MAX; v++) opt(p1, v, "+" + v);
-    const p2 = $("pePts2"); p2.textContent = "";
-    for (let v = PTS_MAX; v >= PTS_MIN2; v--) if (v !== 0) opt(p2, v, (v > 0 ? "+" : "") + v);
-
-    const sl = $("peSlots"); sl.textContent = "";
-    for (let n = 0; n <= 3; n++) opt(sl, n, SLOT_GLYPH[n] + "  (" + n + ")");
-    syncEntry();
-  }
-
-  // The game never puts the same tree in both slots, so skill 2 cannot offer skill 1.
-  function syncEntry() {
-    const a = $("peSkill1").value, s2 = $("peSkill2");
-    for (const o of s2.options) o.disabled = o.value !== "" && o.value === a;
-    if (s2.value && s2.value === a) s2.value = "";
-    const has2 = !!s2.value;
-    $("pePts2").disabled = !has2;
-    $("pePts2").parentElement.style.opacity = has2 ? "1" : ".45";
-  }
-
-  function addTypedCharm() {
-    if (!card || isComplete()) return;
-    const t1 = parseInt($("peSkill1").value, 10);
-    if (!Number.isFinite(t1)) return;
-    const k = [[t1, parseInt($("pePts1").value, 10)]];
-    const t2 = $("peSkill2").value;
-    if (t2 !== "" && parseInt(t2, 10) !== t1) k.push([parseInt(t2, 10), parseInt($("pePts2").value, 10)]);
-    const charm = { r: parseInt($("peRarity").value, 10), s: parseInt($("peSlots").value, 10), k: k };
-    const note = $("peNote");
-
-    // In a live session this CHECKS, it does not draw. applyCharm increments card.draws, and
-    // a follower whose count runs past the session's stops receiving real draws entirely --
-    // syncTo only ever moves forward. So here it just lights what the talisman would match,
-    // leaving the count, the log and the session position untouched.
-    if (live) {
-      const hits = [];
-      for (let i = 0; i < card.cells.length; i++) {
-        const cell = card.cells[i];
-        if (!cell.cond || card.marked.has(i)) continue;
-        if (satisfies(charm, cell.cond)) hits.push(i);
+  function logCheckSquares() {
+    if (!card) return [];
+    const out = [];
+    for (let i = 0; i < card.cells.length; i++) {
+      const cell = card.cells[i];
+      if (!cell.cond || card.marked.has(i)) continue;
+      for (const entry of card.log) {
+        if (satisfies(entry.charm, cell.cond)) { out.push(i); break; }
       }
-      card.hint = hits;
-      renderCard();
-      note.textContent = hits.length
-        ? "Matches " + hits.length + (hits.length === 1 ? " square" : " squares")
-          + " — checked only, not counted as a draw."
-        : "Nothing on your card matches it — checked only, not counted as a draw.";
-      return;
     }
-
-    const r = applyCharm(charm, true);
-    note.textContent = r
-      ? (r.hits.length ? "Added — " + r.hits.length + (r.hits.length === 1 ? " square lights up" : " squares light up")
-                       : "Added — nothing on your card matches it")
-      : "";
-    renderCard();
-    saveCard();
+    return out;
   }
 
-  function setMode(next) {
-    // Following a session pins you to Player. Belt and braces with the disabled tab above:
-    // this is the only funnel into gm mode, including the persisted setting on boot.
-    if (next === "gm" && live && !live.mine) next = "player";
-    if (next === "player" && live && live.mine) next = "gm";
-    mode = next === "player" ? "player" : "gm";
-    $("tabGm").setAttribute("aria-selected", mode === "gm" ? "true" : "false");
-    $("tabPlayer").setAttribute("aria-selected", mode === "player" ? "true" : "false");
-    $("tabGm").classList.toggle("on", mode === "gm");
-    $("tabPlayer").classList.toggle("on", mode === "player");
-    $("gmPanel").classList.toggle("hidden", mode !== "gm");
-    $("playerPanel").classList.toggle("hidden", mode !== "player");
-    $("logTitle").textContent = mode === "player" ? "Talismans logged" : "Recent draws";
-    if (mode === "player") buildEntryForm();
-    renderLive();
-    saveSettings();
+  function setLogCheck(on) {
+    if (on === logCheckOn) return;
+    logCheckOn = on;
+    const cells = $("bingoCard").children;
+    // Toggling the class directly rather than going through card.hint and renderCard(): this
+    // is a peek, not state. It must not be saved, must not survive a reload, and must not
+    // disturb the glow the current draw is showing underneath it.
+    if (on) {
+      for (const i of logCheckSquares()) if (cells[i]) cells[i].classList.add("hinted");
+    } else {
+      const keep = (softHighlight && card && card.hint) || [];
+      for (let i = 0; i < cells.length; i++) {
+        if (keep.indexOf(i) === -1) cells[i].classList.remove("hinted");
+      }
+    }
+    $("logCheckBtn").classList.toggle("held", on);
+  }
+
+  // Which seat you are at is DERIVED, never chosen. It used to be a two-tab switcher, and the
+  // tabs are gone: the session already decides the answer, so a control asking you to pick one
+  // could only ever agree with it or be overruled. Host or solo, you draw; following someone
+  // else's session, you do not. Both seats see exactly the same panel -- the only difference
+  // is which button is live, which is the only difference there ever really was.
+  function currentRole() {
+    return live && !live.mine ? "player" : "gm";
+  }
+
+  function setMode() {
+    mode = currentRole();
+    const follower = mode === "player";
+    $("roleName").textContent = follower ? "Player" : "Gamemaster";
+    $("roleName").classList.toggle("is-player", follower);
+    $("logTitle").textContent = follower ? "Talismans logged" : "Recent draws";
+    // The caller draws; a follower syncs. Shown rather than swapped so the panel is one fixed
+    // shape -- the awkward gap the two panels used to leave was them being different heights.
+    $("drawBtn").classList.toggle("hidden", follower);
+    $("peNext").classList.toggle("hidden", !follower);
+    // The sync result reserves two lines so the block does not jump when a message appears.
+    // A caller never sees one, so for them that reserve is just a gap under the Draw button.
+    $("peNote").classList.toggle("hidden", !follower);
     if (card) renderCard();
   }
 
   // ── Persistence ────────────────────────────────────────────────────────────
   function saveSettings() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, showReroll: showReroll, softHighlight: softHighlight, mode: mode, previewMin: previewMin }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, softHighlight: softHighlight, lockUnmatched: lockUnmatched, previewMin: previewMin }));
     } catch (e) {}
   }
   function saveCard() {
@@ -1584,11 +1531,11 @@
     let d = null;
     try { d = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null"); } catch (e) {}
     if (!d) return;
-    showReroll = d.showReroll !== false;
     $("showReroll").checked = showReroll;
     softHighlight = d.softHighlight !== false;
     $("softHighlight").checked = softHighlight;
-    if (d.mode === "player" || d.mode === "gm") mode = d.mode;
+    lockUnmatched = d.lockUnmatched !== false;
+    $("lockUnmatched").checked = lockUnmatched;
     if (Number.isInteger(d.previewMin)) previewMin = d.previewMin;
     $("previewMin").value = String(previewMin);
     if (d.cfg && typeof d.cfg === "object") {
@@ -1627,6 +1574,8 @@
     // current pools minus whatever is already on the card.
     usedKeys = new Set(card.cells.map((c) => c.key));
     rebuildBags();
+    // Re-derive rather than trust what was saved -- see rebuildEligible.
+    rebuildEligible();
     return true;
   }
 
@@ -1646,11 +1595,11 @@
 
   function doReset() {
     cfg = JSON.parse(JSON.stringify(DEFAULT_CFG));
-    showReroll = true;
     softHighlight = true;
+    lockUnmatched = true;
     previewMin = 5;
-    $("showReroll").checked = true;
     $("softHighlight").checked = true;
+    $("lockUnmatched").checked = true;
     $("previewMin").value = "5";
     $("gridSize").value = String(cfg.size);
     $("freeSpace").checked = cfg.free;
@@ -1736,6 +1685,9 @@
     $("showReroll").addEventListener("change", () => {
       showReroll = $("showReroll").checked; saveSettings(); if (card) renderCard();
     });
+    $("lockUnmatched").addEventListener("change", () => {
+      lockUnmatched = $("lockUnmatched").checked; saveSettings(); if (card) renderCard();
+    });
     $("softHighlight").addEventListener("change", () => {
       softHighlight = $("softHighlight").checked; saveSettings(); if (card) renderCard();
     });
@@ -1746,7 +1698,6 @@
     const newCard = () => guard("New card?", "New card", () => {
       if (live) newCardInSession(); else generate(newToken(), newPlayer());
     });
-    $("generateBtn").addEventListener("click", newCard);
     $("newCardBtn").addEventListener("click", newCard);
     $("resetBtn").addEventListener("click", () => guard("Reset everything?", "Reset", doReset));
 
@@ -1785,24 +1736,53 @@
       if (navigator.clipboard) navigator.clipboard.writeText(v).then(done, done);
       else { $("liveSessionOut").select(); document.execCommand("copy"); done(); }
     });
-    $("tabGm").addEventListener("click", () => setMode("gm"));
-    $("tabPlayer").addEventListener("click", () => setMode("player"));
-    $("peSkill1").addEventListener("change", syncEntry);
-    $("peSkill2").addEventListener("change", syncEntry);
-    $("peAdd").addEventListener("click", addTypedCharm);
-    $("peNext").addEventListener("click", () => {
-      // Identical to the Gamemaster's Draw: drawAt(n) is a pure function of the session and
-      // the number, so following along produces the same talisman rather than a parallel one.
-      if (!doDraw()) return;
-      $("peNote").textContent = card.last && card.last.hits
-        ? card.last.hits + (card.last.hits === 1 ? " square lights up" : " squares light up")
-        : "Nothing on your card matches it";
+    // Press and hold, by pointer or by key. blur is in the list because releasing the mouse
+    // outside the button, or tabbing away mid-hold, otherwise leaves the board stuck glowing.
+    const lc = $("logCheckBtn");
+    for (const ev of ["pointerdown"]) lc.addEventListener(ev, (e) => { e.preventDefault(); setLogCheck(true); });
+    for (const ev of ["pointerup", "pointerleave", "pointercancel", "blur"]) lc.addEventListener(ev, () => setLogCheck(false));
+    lc.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLogCheck(true); }
     });
-    // After the card is restored or generated, so buildEntryForm can read card.keep.
-    setMode(mode);
+    lc.addEventListener("keyup", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLogCheck(false); }
+    });
+    // A re-render replaces every cell node, so a hold spanning one would leave the flag set
+    // with nothing lit. Cheap insurance against that desync.
+    window.addEventListener("blur", () => setLogCheck(false));
+
+    $("peNext").addEventListener("click", async () => {
+      // Ask the SESSION where the Gamemaster is and catch up to that. It used to take a typed
+      // number, which was the same thing as drawing: a player could type any figure and run
+      // ahead of what had actually been called. The draw number is the Gamemaster's to set,
+      // and a player has no way of knowing it anyway -- so it is never an input here.
+      const note = $("peNote");
+      if (!live) { note.textContent = "Not in a session — there is nothing to sync to."; return; }
+      const btn = $("peNext");
+      const before = card.draws;
+      btn.disabled = true;
+      note.textContent = "Checking the session…";
+      try {
+        const st = await api("/live/" + encodeURIComponent(live.session));
+        if (st) { live.n = st.n; live.ended = !!st.ended; }
+        const applied = syncTo(live.n | 0);
+        if (liveLost) { liveLost = false; renderLive(); }
+        renderTwitch();
+        note.textContent = applied
+          ? "Caught up " + applied + (applied === 1 ? " draw. " : " draws. ")
+            + (card.last && card.last.hits
+              ? card.last.hits + (card.last.hits === 1 ? " square lights up" : " squares light up")
+              : "Nothing on your card matches the newest one")
+          : "Already level with the Gamemaster at draw " + before + ".";
+      } catch (e) {
+        if (!liveLost) { liveLost = true; renderLive(); }
+        note.textContent = "Could not reach the session. Keep playing off what the Gamemaster calls.";
+      }
+      btn.disabled = isComplete();
+    });
+    setMode();
     renderLive();
     if (urlSession) {
-      setMode("player");
       history.replaceState(null, "", location.pathname);
       joinLive(urlSession);
     }

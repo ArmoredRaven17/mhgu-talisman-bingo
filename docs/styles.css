@@ -56,13 +56,19 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
   /* body sets user-select:none globally — without this the seed can't be copied. */
   user-select:text;-webkit-user-select:text;
 }
-.seedbar input::placeholder{color:var(--text-dim);opacity:.45}
-.seed-modified{color:var(--text-dim);font-size:11px;opacity:.8;flex-shrink:0}
+.seedbar input::placeholder{color:var(--text-dim);opacity:.6}
+.seed-modified{color:var(--text-dim);font-size:11px;opacity:.9;flex-shrink:0}
 
 /* ── Layout ────────────────────────────────────────────────────────────────── */
 .layout{display:flex;flex:1;min-height:0}
 .sidebar{
-  width:300px;flex-shrink:0;padding:12px;overflow-y:scroll;scrollbar-gutter:stable;
+  /* 380 rather than 300 to fit the draw block. Measured at 1440x900: the talisman NAME
+     already fitted (195px of 195), but a log row's text had 101px for content needing 252,
+     so every two-skill draw was ellipsised down to the talisman name.
+     Costs nothing where it matters: at that size the card is HEIGHT-bound (wrap 1112x799),
+     so taking 80px of width leaves it unchanged at 778. It only shrinks the card on windows
+     narrow enough for the card to be width-bound, which is also where the layout stacks. */
+  width:380px;flex-shrink:0;padding:12px;overflow-y:scroll;scrollbar-gutter:stable;
   display:flex;flex-direction:column;gap:8px;
   background-image:
     linear-gradient(color-mix(in srgb,var(--accent) 90%,transparent),color-mix(in srgb,var(--accent) 90%,transparent)),
@@ -136,7 +142,7 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 .chk:hover input[type="checkbox"]{accent-color:var(--accent-hover,#9a9a9a)}
 .chk input:indeterminate{opacity:.7}
 
-.hint{color:var(--text-dim);opacity:.72;font-size:12px;margin:4px 0}
+.hint{color:var(--text-dim);opacity:.86;font-size:12px;margin:4px 0}
 .row{display:flex;align-items:center}
 .row.gap{gap:8px}
 .row.end{justify-content:flex-end}
@@ -394,7 +400,7 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 .modal-card h3{margin:16px 0 6px;font-size:14px}
 .modal-card p{margin:0 0 10px;line-height:1.45}
 .modal-card a{color:var(--accent-hover)}
-.modal-card .muted{color:var(--text-dim);font-size:13px;opacity:.75}
+.modal-card .muted{color:var(--text-dim);font-size:13px;opacity:.86}
 .modal-card ul{margin:0 0 10px;padding-left:18px}
 .modal-card li{margin-bottom:5px;line-height:1.4}
 .modal-card code{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-family:ui-monospace,Consolas,monospace;font-size:12px;user-select:text;-webkit-user-select:text}
@@ -462,37 +468,61 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 .legend-sw{width:14px;height:14px;border-radius:4px;flex-shrink:0}
 
 /* ── Draw panel ────────────────────────────────────────────────────────────── */
-/* Sits under the card. Three columns: the controls, the charm just drawn, and the log.
-   The card above it keeps flex:1, so this takes only the height it needs and the grid
-   still fills whatever is left. */
-.drawbar{
-  flex-shrink:0;display:grid;gap:12px;
-  grid-template-columns:minmax(180px,1fr) minmax(220px,1.2fr) minmax(200px,1.4fr);
-  align-items:stretch;
-  border:1px solid var(--line);border-radius:10px;padding:12px;
+/* The draw block. A plain sidebar block rather than a .panel, because the panel handler is
+   an accordion -- it closes every panel before toggling the clicked one, so a .panel here
+   could never stay open. This is what "always visible" means in practice. */
+.drawblock{
+  display:flex;flex-direction:column;gap:6px;
+  border:1px solid var(--line);border-radius:8px;padding:10px;
   background:var(--well,#101216);
 }
+/* Gutters. Every part of this block changes height as you play -- the charm goes from one
+   line of prompt to an icon with two skills, the log fills from empty to scrolling -- and
+   without reserved space the block would grow and shove the panels below it down the
+   sidebar on the first draw, then again on the second. Each part gets the room its filled
+   state needs, so the block is the same size before the first draw and after the last. */
+/* No floor here any more. The panel is a role line plus one button -- nothing in it varies --
+   and the only thing that did vary, #peNote's message, reserves its own two lines. A floor on
+   top of that was 33px of dead space under the Draw button for every caller. */
+.drawblock .last-charm{min-height:94px}
+.drawblock .draw-log{height:200px;min-height:200px;max-height:200px;flex:none}
+/* A rule closing the current draw and another closing the log. The block stacks three
+   unrelated things -- controls, the talisman just called, the history -- and without the
+   dividers they read as one long list of text in the same colour. */
+.drawblock .last-charm{border-bottom:1px solid var(--line);padding-bottom:8px}
+.drawblock .draw-log{border-bottom:1px solid var(--line);padding-bottom:6px}
+#logCheckBtn{margin-top:2px}
+.log-head{
+  margin:0;font-size:14px;font-weight:600;color:var(--text);opacity:1;
+  border-bottom:1px solid var(--line);padding-bottom:5px;
+}
+.btn.held{background:var(--cta);color:#0b0c0f;border-color:var(--cta)}
 .draw-controls{display:flex;flex-direction:column;gap:6px;min-width:0}
 .draw-controls .hint{margin:0}
-.draw-count{margin:2px 0 0;font-size:13px;color:var(--text-dim)}
-.draw-count strong{font-size:16px}
 
 /* The drawn charm, laid out the way the game shows one: rarity icon, name, slot pips,
    then a line per skill. */
 .last-charm{
   display:flex;flex-direction:column;justify-content:center;gap:6px;min-width:0;
-  border-left:1px solid var(--line);border-right:1px solid var(--line);padding:0 12px;
+  border-top:1px solid var(--line);padding:8px 0 0;margin-top:0;
 }
-.charm{display:flex;align-items:center;gap:10px;min-width:0}
+.charm{--n-w:30px;--fld:calc(var(--n-w) + 6px);
+  display:flex;align-items:center;gap:10px;min-width:0}
 .charm-icon{width:40px;height:40px;object-fit:contain;flex-shrink:0}
 .charm-body{min-width:0;flex:1}
-.charm-name{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
-.charm-slots{font-size:12px;opacity:.75;letter-spacing:1px}
-.charm-skill{font-size:12.5px;opacity:.9;line-height:1.35}
+.charm-name{font-size:14px;font-weight:600;display:flex;align-items:baseline;gap:6px}
+.charm-n{font-weight:400;opacity:.75;flex-shrink:0;min-width:var(--n-w)}
+/* Monospaced for the same reason the log's are: the glyphs read as a slot diagram rather
+   than three characters. */
+.charm-slots{margin-left:var(--fld);font-size:12px;opacity:.9;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.08em}
+.charm-skill{margin-left:var(--fld);font-size:12.5px;opacity:1;line-height:1.35}
 /* A negative second skill is the joke half of a charm — it should be visible at a glance,
    not something you have to read the minus sign to notice. */
 .charm-skill.neg{color:#ff8f8f}
-.charm-note{font-size:12px;opacity:.7}
+/* The placeholder second skill. Dimmed so it reads as an absent field rather than a value. */
+.charm-skill.none,.log-skill.none{opacity:.55}
+.charm-note{font-size:12px;opacity:.86}
 /* A draw that marked something gets the win colour, so a hit is legible out of the corner
    of your eye during an auto run — which is the only way anyone watches 700 draws. */
 .charm.hit .charm-name{color:var(--win)}
@@ -501,17 +531,6 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 /* Which seat you are at the table. Two tabs rather than a toggle because they are not two
    states of one control -- the Gamemaster rolls talismans, the player transcribes them, and
    the panel underneath changes completely. */
-.modebar{display:flex;gap:4px;margin-bottom:8px}
-.modetab{
-  flex:1;padding:8px 12px;border:1px solid var(--line);border-radius:6px 6px 0 0;
-  background:var(--card);color:var(--text-dim);font:inherit;font-size:13px;font-weight:600;
-  cursor:pointer;opacity:.6;
-}
-.modetab:hover{opacity:.85}
-.modetab.on{opacity:1;background:var(--well);border-bottom-color:transparent;color:var(--text)}
-.modetab:disabled,.modetab.locked{opacity:.3;cursor:not-allowed}
-.modetab:disabled:hover{opacity:.3}
-.modetab:focus-visible{outline:2px solid var(--cta);outline-offset:2px}
 
 /* Live-session controls. Deliberately quiet: going live is a thing you do once at the
    start of a stream, not a control you reach for during play. */
@@ -527,6 +546,9 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
   box-shadow:0 0 6px 1px rgba(255,77,77,.8);
 }
 .icon-btn .live-dot{position:absolute;top:4px;right:4px}
+/* A dropped session, which used to be reported by a line in the draw panel. Amber rather than
+   red, and it stops pulsing: the session is not dead, it just is not reaching the server. */
+.live-dot.lost{background:#ffb14d;box-shadow:0 0 6px 1px rgba(255,177,77,.8);animation:none}
 #twitchBtn{position:relative}
 .live-banner{
   display:flex;align-items:center;gap:7px;margin:6px 0 4px;
@@ -542,35 +564,20 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
    waiting for draws that are never coming. */
 .hint.bad{color:#ff8f8f;opacity:1}
 
-.player-entry{display:flex;flex-direction:column;gap:6px}
-.pe-manual{border:1px solid var(--line);border-radius:7px;padding:6px 9px;background:var(--card)}
-.pe-manual summary{cursor:pointer;font-size:12.5px;opacity:.8;user-select:none}
-.pe-manual summary:hover{opacity:1}
-.pe-manual[open]{padding-bottom:9px}
-.pe-manual .pe-row{margin-top:5px}
-.pe-row{display:flex;align-items:center;gap:8px;font-size:12.5px}
-.pe-row>span{flex:0 0 62px;opacity:.75}
-/* Matches .field select, which is what every other dropdown on the page uses. */
-.pe-row .sel{
-  flex:1;min-width:0;
-  background:var(--bg2);color:var(--text);border:1px solid var(--line);
-  border-radius:7px;padding:5px 8px;font-size:12.5px;line-height:1.4;
-}
-.pe-row .sel:disabled{opacity:.5;cursor:not-allowed}
-.pe-row .sel option:disabled{opacity:.35}
-/* Removing a mis-entered talisman. Player tab only. */
-.log-del{
-  flex-shrink:0;background:none;border:0;color:var(--text-dim);opacity:.45;
-  cursor:pointer;font-size:14px;line-height:1;padding:0 2px;
-}
-.log-del:hover{opacity:1;color:#ff8f8f}
-.log-del:focus-visible{outline:2px solid var(--cta);outline-offset:1px;opacity:1}
+/* The sync result reserves two lines whether or not there is a message. Otherwise the panel
+   grew the moment one appeared, and the whole block below it shifted -- and the floor would
+   need re-measuring every time the wording changed. Keep these messages within two lines. */
+#peNote{min-height:20px;margin:0}
+/* Which seat you are at. Shown, not chosen. */
+.role-line{margin:0 0 2px;font-size:12px;color:var(--text-dim);opacity:.86}
+.role-line strong{color:var(--cta)}
+.role-line strong.is-player{color:var(--win)}
 
 .draw-log-wrap{display:flex;flex-direction:column;gap:4px;min-width:0}
 .draw-log-wrap .hint{margin:0}
 .draw-log{
-  flex:1;min-height:64px;max-height:104px;overflow-y:auto;
-  display:flex;flex-direction:column;gap:2px;font-size:11.5px;line-height:1.35;
+  flex:1;min-height:64px;max-height:190px;overflow-y:auto;
+  display:flex;flex-direction:column;gap:2px;font-size:13px;line-height:1.35;
   /* The log scrolls, so its overlay scrollbar sat on top of the right-hand end of each row —
      which is exactly where "N to mark" lives. scrollbar-gutter reserves the track even when
      the log is short enough not to scroll, so rows don't shift as entries accumulate; the
@@ -578,21 +585,30 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
   scrollbar-gutter:stable;
   padding-right:10px;
 }
-.log-row{display:flex;gap:6px;align-items:baseline;opacity:.62}
-.log-row.hit{opacity:1;color:var(--win)}
-.log-n{flex-shrink:0;opacity:.6;min-width:34px}
-.log-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.log-hit{flex-shrink:0;font-weight:700}
+/* One field per line, not one row per entry. On a single line the talisman competed with the
+   draw number, the slot glyph and the match count for the same narrow column, so every
+   two-skill draw was ellipsised down to roughly its name -- the half worth reading. Stacked,
+   nothing truncates and the skills line up into a column down the log. Costs vertical space
+   in a box that scrolls anyway. */
+.log-row{
+  --n-w:30px;--fld:calc(var(--n-w) + 6px);
+  display:flex;flex-direction:column;gap:1px;
+  padding:3px 0;border-bottom:1px solid #ffffff0f;
+}
+.log-row:last-child{border-bottom:0}
+.log-row.hit{color:var(--win)}
+.log-line{display:flex;gap:6px;align-items:baseline;min-width:0}
+.log-n{flex-shrink:0;opacity:.75;min-width:var(--n-w)}
+.log-name{flex:1;min-width:0;font-weight:700;overflow-wrap:anywhere}
+.log-skill{margin-left:var(--fld);opacity:1;overflow-wrap:anywhere;line-height:1.3}
+.log-hit{margin-left:var(--fld);font-weight:700}
+.log-row:not(.hit) .log-hit{opacity:.86;font-weight:400}
 /* Monospaced so the glyphs line up into a column down the log, which is what makes them
    scannable at a glance rather than three more characters to read. */
-.log-slots{flex-shrink:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  letter-spacing:.08em;opacity:.75}
+.log-slots{margin-left:var(--fld);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.08em;opacity:.9}
 
-@media (max-width:760px){
-  .drawbar{grid-template-columns:1fr}
-  .last-charm{border-left:none;border-right:none;padding:8px 0;
-    border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-}
 @media print{
-  .drawbar{display:none !important}
+  .drawblock{display:none !important}
 }

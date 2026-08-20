@@ -200,27 +200,36 @@ The draw count is now the **caller's clock** rather than an objective score: `fi
 the draw count read at that moment. Still frozen once set, so a later unmark can't move a score that
 already happened.
 
-**Marking is NOT gated on the draw history, and the half-built gate is switched off.** The code is
-still there (`card.eligible`, `lockUnmatched`, the `.locked` class) and it works, but the control is
-hidden and the flag is a hard-coded `false`.
+**Marking IS gated on the draw history, and that reversed.** A square only becomes claimable
+once some talisman has actually satisfied it (`card.eligible`, `isEligible()`, the `.locked`
+class). Unmarking is always allowed — that is how you undo a misclick.
 
-It was written to keep people honest, and the idea is sound in a way it could not be in MHGU Bingo:
-that app's squares are hunt objectives only the player can adjudicate, whereas here every square is
-a condition on a talisman and **the roller produced the talisman**, so the draw history is an
-authoritative record exactly like a traditional caller's board.
+The idea is sound here in a way it could not be in MHGU Bingo: that app's squares are hunt
+objectives only the player can adjudicate, whereas here every square is a condition on a talisman
+and **the roller produced the talisman**, so the draw history is an authoritative record exactly
+like a traditional caller's board.
 
-What it does not survive is the actual table. **One person calls; everyone else only watches their
-own card.** Those other devices never draw, so their `eligible` set stays empty and every square
-locks forever — the check fails hardest for precisely the players it was meant to keep honest. It
-cannot come back until a draw can reach the other screens.
+**It was switched off for a long time, and the objection expired.** It was that one person calls
+while everyone else only watches their own card — those other devices never draw, so their
+`eligible` stayed empty and every square locked forever, failing hardest for precisely the players
+it was meant to keep honest. Followers now receive the draws themselves: polling syncs them, and
+**Sync to Current Draw** catches up by hand. The set fills on every screen, not just the caller's.
 
-`lockUnmatched` is read as a literal rather than from settings on purpose: anyone who ticked the box
-while it was briefly live has `lockUnmatched: true` in localStorage, and honouring that with no
-control on the page would strand them with an uncompletable card. The key is no longer written, so
-it clears itself on the next settings save.
+**Log Check is the other half of it.** A locked board is only fair if you can see what the calls
+have already covered. Hold the button under the log and every unmarked square anything in the log
+satisfies glows; release and it goes. It is a peek, not state — it toggles the class directly
+rather than writing `card.hint`, so it is never saved and never disturbs the current draw's glow
+underneath.
 
-`card.eligible` is still tracked on every draw. It costs nothing and means the data is already there
-if the gate returns.
+It reads **`card.log`, not `card.eligible`**, even though eligible reaches further back. A check
+that shows a square you cannot justify from the visible log is worse than none. The cost is that it
+only covers the last 50 draws, which is what the log holds.
+
+**`card.eligible` is re-derived, never trusted.** See the Gamemaster/Player section below for
+`rebuildEligible()` and why deletion is gone.
+
+`lockUnmatched` is a real setting again (**Card Setup → "Only allow marking squares that have been
+called"**, default on) rather than the hard-coded `false` it was while the control was hidden.
 
 There is no auto-draw. Draws are one at a time, because a person is reading them out.
 
@@ -230,35 +239,44 @@ Two seats at the same table, persisted in settings because which one you are is 
 where you're sitting, not of the card.
 
 - **Gamemaster** rolls talismans here. This is the original behaviour.
-- **Player** has no roller. It logs the talisman someone else called, via dropdowns for the
-  talisman, both skills, their points and the slot count.
+- **Player** has no roller. It follows the session's draws and can catch up to them by hand.
 
-The Player tab exists so a player who isn't calling can still use the hint system. That is the whole
-point, so `applyCharm()` is the single path a talisman takes to a card and a typed talisman is
-indistinguishable from a rolled one after that call. Two paths would drift.
+**Hand-entry of talismans has been removed.** The Player tab used to carry six dropdowns for
+typing in a talisman someone else called. The log replaced it: a follower's card receives the real
+draws, and Log Check answers "what have I missed" without anyone retyping a charm. `applyCharm()`
+is still the single path a talisman takes to a card, and the log entry's `typed` flag went with the
+form — with no hand-entry path left it could never be true.
 
-**Rarity is in the entry form even though it looks like skill data.** A fifth of the pools are
-rarity tiles, so leaving it out would make "Roll a Creator Talisman" permanently unsatisfiable for
-every player — the tab would look complete and silently break a whole pool.
+The Player tab now holds only **Sync to Current Draw**, the count, and the result note. That button
+asks the *session* where the Gamemaster is and catches up to exactly that. It used to take a typed
+draw number, which was the same thing as drawing — a player could type any figure and run ahead of
+what had been called — and before that it was a bare `+1`, which was worse. The draw number is the
+Gamemaster's to set and a player has no way of knowing it, so it is never an input. The button shows
+only to a **follower in a session**: a host sets the number, and outside a session there is nothing
+to ask.
 
-The skill dropdowns list the **card's 20 kept trees**, not all 137. A talisman rolled for this card
-can only carry kept trees, so the rest are unenterable anyway, and 20 names is a usable dropdown
-where 137 is not. Slot 1 offers +1..+13 because no legal first-skill row can roll below +1 (checked
-against all 248); slot 2 offers −10..+13 without 0, because the game drops a 0-point second skill
-as no second skill at all, which is what "(none)" is for. Skill 2 cannot offer whatever skill 1 is
-set to — the game never puts one tree in both slots.
+**A consequence worth knowing:** a Player-tab seat that is *not* in a session now has no way to
+advance its card at all. Everyone playing the game as designed has a path (the Gamemaster draws, a
+follower syncs), but someone playing along off a caller with no live session has an inert board.
 
-**Only the Player tab can delete a log entry.** A typo is a player problem; a Gamemaster deleting a
-roll they didn't like is cheating with extra steps. Removal renumbers everything newer, decrements
-the draw count, and recomputes the hint from whatever is newest afterwards.
+**Nothing removes a talisman from the log.** Deletion used to be offered on the Player tab, on
+the reasoning that a typo is a player problem while a Gamemaster deleting a roll they didn't like
+is cheating with extra steps. Both halves of that expired: hand-entry is gone, so there are no
+typos to fix, and with marking gated on the draw history a delete is *only* a cheat vector — draw,
+see which square it unlocked, take the draw back, mark it anyway. `removeDraw()` and both delete
+buttons are gone.
 
-`card.eligible` is deliberately NOT rebuilt on removal. With the marking gate disabled it has no
-effect, and rebuilding it from `card.log` would be wrong regardless, since the log only keeps 50
-entries. If the gate ever returns, this is the first thing to fix.
+`rebuildEligible()` survives the removal with a different job. It replays `drawAt(1..card.draws)`
+and re-derives the claimable set, and `loadCard()` calls it on every restore rather than trusting
+what was saved — cards written while deletion existed carry a set inflated by draws that were taken
+back, and with the gate on that inflation is the difference between a locked square and a free one.
+Squares already marked are re-added, so an unmark can always be redone.
 
-**This is the groundwork for the transport question, not a replacement for it.** A player still has
-to hear the call and type it. It does mean the hint system now works for everyone at the table
-rather than only the caller, which is what a Twitch/Worker Gamemaster would automate later.
+**Per-square reroll is hidden.** `showReroll` is a hard-coded `false` and its checkbox carries
+`.hidden`, for the same reason `lockUnmatched` was read as a literal while *it* was hidden: anyone
+who ticked the box while the control was live would otherwise get a button they could never turn
+off. The key is no longer written, so it clears on the next settings save. The Help modal's
+"Rerolling" section went with it, rather than documenting something unreachable.
 
 ## Pacing
 
