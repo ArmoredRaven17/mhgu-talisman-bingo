@@ -921,43 +921,67 @@
   // Searched against --bg2, the block's own ground, like hintColor is against the well. The
   // player takes the complementary hue so the two seats are told apart by colour and not only
   // by the word.
-  function roleColor(c, complement) {
-    // The ground is NOT --bg2. The block paints a 60% --bg1 wash over a texture on top of it,
-    // so the text sits on something darker than bg2 -- which is why contrast measured against
-    // bg2 read "fine" while the themes looked muddy. Composite it the way CSS does.
+  // Coloured text on the draw block: the role names and the match state. All three are shades
+  // of the THEME colour, told apart by lightness rather than by hue.
+  //
+  // The complementary hue this used to take is gone. It only ever existed to separate the two
+  // roles, and it fought the theme -- a Rathalos board with a cyan "Player" on it reads as a
+  // different app's widget. Lightness separates them just as well and stays in palette.
+  //
+  // The ground is NOT --bg2. The block paints a 60% --bg1 wash over a texture on top of it, so
+  // the text sits on something darker than bg2 -- which is why contrast measured against bg2
+  // read "fine" while the themes looked muddy. Composite it the way CSS does.
+  function themeShade(c, step) {
     const bg1 = darken(c, .80), bg2 = darken(c, .95);
     const ground = [0, 1, 2].map((i) => Math.round(bg1[i] * 0.6 + bg2[i] * 0.4));
-
     const [hue, sat] = rgbToHsl(c);
-    const h = complement ? (hue + 0.5) % 1 : hue;
+    const s = Math.max(sat, 0.62);
 
     // Direction is decided by the ground, not fixed. Most themes are dark and want light text,
-    // but the bright monsters (Rajang, Agnaktor, Bulldrome, Valstrax) give a light block where
-    // light text runs to 1.5:1 -- worse than anything this was meant to fix.
-    //
-    // Walk AWAY from the ground starting at mid lightness and take the first candidate that
-    // clears the target: as bright as it needs to be and no brighter, so saturation survives
-    // to tell the two seats apart.
+    // but the bright monsters give a light block where light text runs to 1.5:1. Bounded well
+    // short of white and black at both ends: past ~0.88 a hue reads as white and below ~0.30 as
+    // black, and either end is the grey label this exists to avoid.
     const groundDark = contrast(ground, WHITE) > contrast(ground, BLACK);
-    const steps = [];
-    if (groundDark) for (let l = 0.50; l <= 0.97; l += 0.02) steps.push(l);
-    else            for (let l = 0.50; l >= 0.03; l -= 0.02) steps.push(l);
+    // The band has to run nearly the full range. These shades share the ground's OWN hue, so
+    // the only thing separating text from background is lightness -- a tighter band (0.30 to
+    // 0.88) left Tigrex at 1.58:1. Saturation is held at 0.62 or above throughout, so even the
+    // ends stay visibly tinted rather than reading as white or black.
+    const lo = 0.14, hi = 0.96;
+    const up = [], down = [];
+    for (let l = 0.52; l <= hi; l += 0.02) up.push(l);
+    for (let l = 0.48; l >= lo; l -= 0.02) down.push(l);
+    // Preferred direction first, then the OTHER one. A mid-luminance ground can be too light
+    // for a lighter shade to reach AA and too dark for a darker one to be the obvious choice;
+    // picking a direction up front and never reconsidering left six themes stuck at 3.0-4.3
+    // with all three shades collapsed onto the same unreachable fallback.
+    const dirs = groundDark ? [up, down] : [down, up];
 
-    // AAA rather than AA: this is a short run of coloured text that has to read at a glance,
-    // and at 4.5 the dark themes looked dingy. Fall back through saturation, then to the plain
-    // extreme, which always clears AA -- the min-max over every possible ground is about 4.6.
-    let best = null, bestRatio = 0;
-    for (const target of [7, 4.5]) {
-      for (const s of [Math.max(sat, 0.72), 0.58, 0.44, 0.3, 0.16]) {
-        for (const l of steps) {
-          const cand = hslToRgb([h, s, l]);
-          const r = contrast(cand, ground);
-          if (r >= target) return cand;
-          if (r > bestRatio) { bestRatio = r; best = cand; }
+    // Saturation climbs rather than falls when contrast is short. More chroma lets a shade sit
+    // further from the ground while still reading as the theme colour -- desaturating would do
+    // the opposite and produce the grey label this exists to avoid.
+    let baseL = null, baseS = s, chosen = dirs[0], best = null, bestRatio = 0;
+    outer:
+    for (const target of [7, 5.5, 4.5]) {
+      for (const steps of dirs) {
+        for (const sa of [s, Math.max(s, 0.8), Math.max(s, 0.95)]) {
+          for (const l of steps) {
+            const cand = hslToRgb([hue, sa, l]);
+            const r = contrast(cand, ground);
+            if (r >= target) { baseL = l; baseS = sa; chosen = steps; break outer; }
+            if (r > bestRatio) { bestRatio = r; best = cand; }
+          }
         }
       }
     }
-    return bestRatio >= 4.5 ? best : (groundDark ? WHITE : BLACK);
+    if (baseL == null) return best || WHITE;
+
+    // Spread the variants across whatever headroom is LEFT between the base and the bound,
+    // rather than by a fixed offset. A fixed offset clamps to the bound when the base already
+    // sits near it, which collapsed all three shades onto the same value on a third of the
+    // themes -- the roles then differed in name only.
+    // The bound is the end of whichever direction actually won, not the preferred one.
+    const bound = chosen === up ? hi : lo;
+    return hslToRgb([hue, baseS, baseL + (bound - baseL) * step]);
   }
 
   function ctaColor(c) {
@@ -1006,9 +1030,12 @@
     r.setProperty("--win",          css(winColor(c)));
     r.setProperty("--hint",         css(hintColor(c)));
     r.setProperty("--cta",          css(ctaColor(c)));
-    r.setProperty("--role-gm",      css(roleColor(c, false)));
-    r.setProperty("--role-player",  css(roleColor(c, true)));
-    r.setProperty("--match",        css(roleColor(c, true)));
+    // Fractions of the remaining headroom, not absolute lightness steps.
+    r.setProperty("--role-gm",      css(themeShade(c, 0)));
+    r.setProperty("--role-player",  css(themeShade(c, 0.45)));
+    // The furthest from the ground of the three: a match is the one thing on the block worth
+    // catching an eye.
+    r.setProperty("--match",        css(themeShade(c, 0.72)));
     r.setProperty("--text",     "#ffffff");
     r.setProperty("--text-dim", "#fffffff5");
     r.setProperty("--line",     "rgba(11,8,8,0.12)");

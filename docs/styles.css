@@ -535,8 +535,8 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
    of your eye during an auto run — which is the only way anyone watches 700 draws. */
 /* --match, not --win: --win is searched for contrast against WHITE because it is a button
    fill with white text on it. As text on the draw block it has no guarantee, and on some
-   themes it was unreadable. --match is the same complementary hue, searched against the
-   block's ground. */
+   themes it was unreadable. --match is a light shade of the theme colour, searched against the
+   block's own ground. */
 .charm.hit,
 .charm-note.hit{color:var(--match)}
 /* The win colour beats the negative-skill red on a matching draw. A log row that hits colours
@@ -588,8 +588,8 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 /* Which seat you are at. Shown, not chosen. */
 .role-line{margin:0 0 4px;font-size:14px;color:var(--text-dim);opacity:.86}
 /* The role itself is the point of the line, so it carries the size and the colour while the
-   "You are the" stays quiet. Two different accents rather than one, because which seat you are
-   in is the thing worth telling apart at a glance. */
+   "You are the" stays quiet. The two seats are two shades of the theme colour -- distinct
+   enough to tell apart, and still the board's own palette. */
 .role-line strong{font-size:18px;font-weight:700;letter-spacing:.01em;color:var(--role-gm)}
 .role-line strong.is-player{color:var(--role-player)}
 
