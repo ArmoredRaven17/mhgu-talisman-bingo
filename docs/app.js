@@ -1271,7 +1271,9 @@
     $("peManualHint").classList.toggle("hidden", following);
     // Manual entry lives in the sidebar so six dropdowns don't squeeze the board. It is for
     // players only, and pointless while a session is feeding draws in automatically.
-    $("manualPanel").classList.toggle("hidden", mode !== "player" || following);
+    // Available in a live session too, but as a CHECKER there — see addTypedCharm. Hidden
+    // only when there is no player card in front of you.
+    $("manualPanel").classList.toggle("hidden", mode !== "player");
     $("peManualPointer").classList.toggle("hidden", following);
 
     // Everything about starting, sharing and ending a session now lives in the header's
@@ -1292,6 +1294,12 @@
     gmTab.title = isFollower
       ? "The Gamemaster draws for this session — your card follows along"
       : "";
+
+    const checking = !!live && !live.mine;
+    $("peAdd").textContent = checking ? "Check Talisman" : "Add Talisman";
+    $("peManualNote") && ($("peManualNote").textContent = checking
+      ? "In a session this only checks a talisman against your card — the Gamemaster's draws are what count."
+      : "For when you have lost your place, or the Gamemaster is calling from the game rather than from here.");
 
     const hosting = !!live && live.mine && !liveLost;
     if (liveLost) {
@@ -1495,8 +1503,29 @@
     const t2 = $("peSkill2").value;
     if (t2 !== "" && parseInt(t2, 10) !== t1) k.push([parseInt(t2, 10), parseInt($("pePts2").value, 10)]);
     const charm = { r: parseInt($("peRarity").value, 10), s: parseInt($("peSlots").value, 10), k: k };
-    const r = applyCharm(charm, true);
     const note = $("peNote");
+
+    // In a live session this CHECKS, it does not draw. applyCharm increments card.draws, and
+    // a follower whose count runs past the session's stops receiving real draws entirely --
+    // syncTo only ever moves forward. So here it just lights what the talisman would match,
+    // leaving the count, the log and the session position untouched.
+    if (live && !live.mine) {
+      const hits = [];
+      for (let i = 0; i < card.cells.length; i++) {
+        const cell = card.cells[i];
+        if (!cell.cond || card.marked.has(i)) continue;
+        if (satisfies(charm, cell.cond)) hits.push(i);
+      }
+      card.hint = hits;
+      renderCard();
+      note.textContent = hits.length
+        ? "Matches " + hits.length + (hits.length === 1 ? " square" : " squares")
+          + " — checked only, not counted as a draw."
+        : "Nothing on your card matches it — checked only, not counted as a draw.";
+      return;
+    }
+
+    const r = applyCharm(charm, true);
     note.textContent = r
       ? (r.hits.length ? "Added — " + r.hits.length + (r.hits.length === 1 ? " square lights up" : " squares light up")
                        : "Added — nothing on your card matches it")
