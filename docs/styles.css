@@ -212,8 +212,10 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
   background:var(--well,#101216);
   border:1px solid var(--line);border-radius:10px;padding:10px;
 }
-.status{flex-shrink:0;margin:0;text-align:center;font-size:14px;min-height:1.2em;color:var(--text-dim)}
-.status.win{color:var(--win);font-weight:700}
+.status{flex-shrink:0;margin:0;text-align:center;font-size:14px;min-height:1.2em;color:var(--text)}
+/* White too, and bold rather than coloured: --win is a button fill searched against WHITE,
+   so as text on the page ground it had the same problem the draw block's colours did. */
+.status.win{color:var(--text);font-weight:700}
 
 /* The card sizes itself to the smaller of the stage's width and height, so it always
    fits without the page ever needing to scroll (body is overflow:hidden). Font sizes
@@ -533,16 +535,16 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 .charm-note{font-size:12px;opacity:.86}
 /* A draw that marked something gets the win colour, so a hit is legible out of the corner
    of your eye during an auto run — which is the only way anyone watches 700 draws. */
-/* --match, not --win: --win is searched for contrast against WHITE because it is a button
-   fill with white text on it. As text on the draw block it has no guarantee, and on some
-   themes it was unreadable. --match is a light shade of the theme colour, searched against the
-   block's own ground. */
+/* Plain text for now. A match used to be a shade of the theme colour (--match, still derived
+   in applyTheme and ready to switch back on): coloured text on this block cannot clear AA on
+   six of the themes, because the only colours that reach it there are white and black. A hit
+   is still marked out by the bold weight on its match count. */
 .charm.hit,
-.charm-note.hit{color:var(--match)}
+.charm-note.hit{color:var(--text)}
 /* The win colour beats the negative-skill red on a matching draw. A log row that hits colours
    every line, and the current draw is the same talisman -- it colouring only its name was the
    two displays disagreeing about what a hit looks like. */
-.charm.hit .charm-skill.neg{color:var(--match)}
+.charm.hit .charm-skill.neg{color:var(--text)}
 .charm.god{outline:2px solid var(--win);outline-offset:4px;border-radius:8px}
 
 /* Which seat you are at the table. Two tabs rather than a toggle because they are not two
@@ -587,11 +589,10 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 #peNote{min-height:20px;margin:0}
 /* Which seat you are at. Shown, not chosen. */
 .role-line{margin:0 0 4px;font-size:14px;color:var(--text-dim);opacity:.86}
-/* The role itself is the point of the line, so it carries the size and the colour while the
-   "You are the" stays quiet. The two seats are two shades of the theme colour -- distinct
-   enough to tell apart, and still the board's own palette. */
-.role-line strong{font-size:18px;font-weight:700;letter-spacing:.01em;color:var(--role-gm)}
-.role-line strong.is-player{color:var(--role-player)}
+/* The role itself is the point of the line, so it carries the size while the "You are the"
+   stays quiet. Colour is off for now -- see the note on .charm.hit; --role-gm and
+   --role-player are still derived and can be put back on this rule. */
+.role-line strong{font-size:18px;font-weight:700;letter-spacing:.01em;color:var(--text)}
 
 .draw-log-wrap{display:flex;flex-direction:column;gap:4px;min-width:0}
 .draw-log-wrap .hint{margin:0}
@@ -616,7 +617,7 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
   padding:3px 0;border-bottom:1px solid #ffffff0f;
 }
 .log-row:last-child{border-bottom:0}
-.log-row.hit{color:var(--match)}
+.log-row.hit{color:var(--text)}
 .log-line{display:flex;gap:6px;align-items:baseline;min-width:0}
 .log-n{flex-shrink:0;opacity:.75;min-width:var(--n-w)}
 .log-name{flex:1;min-width:0;font-weight:700;overflow-wrap:anywhere}
