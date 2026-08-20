@@ -506,7 +506,7 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
   margin:0;font-size:14px;font-weight:600;color:var(--text);opacity:1;
   border-bottom:1px solid var(--line);padding-bottom:5px;
 }
-.btn.on{border-color:var(--cta);color:var(--cta);background:#ffffff0d}
+.btn.on{border-color:#fff;color:#fff;background:#ffffff2e;font-weight:600}
 .draw-controls{display:flex;flex-direction:column;gap:6px;min-width:0}
 .draw-controls .hint{margin:0}
 
