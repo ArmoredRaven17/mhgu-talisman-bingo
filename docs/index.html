@@ -57,9 +57,8 @@
         <div class="panel-body">
           <p id="poolStatus" class="hint"></p>
           <p id="sessionLock" class="hint hidden">In a session the Gamemaster sets the card:
-             grid size, free space and the pools come from the session, and highlighting and the
-             marking rule are fixed so every seat plays the same game. Enlarge on hover is still
-             yours.</p>
+             grid size, free space and the pools come from the session, and marking stays gated
+             on the draws. Highlighting and enlarge-on-hover are still yours.</p>
           <label class="field">Grid size
             <select id="gridSize">
               <option value="3">3 &times; 3</option>
@@ -78,9 +77,9 @@
                node to read, and so turning it back on is one class away. -->
           <label class="chk hidden"><input type="checkbox" id="showReroll">Reroll button on squares</label>
           <label class="chk"><input type="checkbox" id="softHighlight" checked>Highlight matching squares</label>
-          <label class="chk"><input type="checkbox" id="lockUnmatched" checked>Only allow marking squares that have been called</label>
-          <p class="hint">Hold <strong>Log Check</strong> under the log to see everything the
-             calls so far have already covered.</p>
+          <p class="hint">Squares can only be marked once a draw has actually matched them, so a
+             BINGO is always one the calls justify. Hold <strong>Log Check</strong> under the log
+             to see everything the calls so far have covered.</p>
           <p class="hint">A drawn talisman glows the squares it would satisfy. Marking is
              always yours &mdash; the glow only points.</p>
           <label class="field">Enlarge squares on hover
@@ -331,6 +330,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=78"></script>
+<script src="app.js?v=80"></script>
 </body>
 </html>

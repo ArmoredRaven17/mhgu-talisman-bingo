@@ -62,6 +62,18 @@ Seeded **per draw**, not from one advancing stream. A running stream would have 
 zero to reach draw 12 after a reload, and would desync permanently the moment anyone removed a log
 entry. `drawAt(12)` is just `drawAt(12)`.
 
+**The Gamemaster's settings are the session's.** Grid size, the free-space flag and the pool
+weights are literally in the seed body — `MHGU-{size}{F|N}-{pools}-{token}` — so they always were
+the caller's: `applySeed` adopts them on join, and `newCardInSession` rebuilds them from the session
+before every new card, precisely so a local change cannot fork the seed. What was missing is that
+the controls still *looked* editable; `syncSessionLock()` disables them while `live` is set, host
+included, since the session string is minted when the session starts.
+
+Nothing else is locked. Highlighting and hover-enlarge are not in the seed, so freezing them would
+pin each player at whatever they happened to have locally — that is not the Gamemaster dictating
+anything, it is every seat keeping a different rule. If either should become the caller's choice,
+it has to ride in the session string like size and the pools do.
+
 **Cards must differ per player.** Shared calls plus an identical card is not a fast game, it is no
 game: every player marks in lockstep and calls BINGO on the same draw. Hence the player token.
 
@@ -228,8 +240,15 @@ only covers the last 50 draws, which is what the log holds.
 **`card.eligible` is re-derived, never trusted.** See the Gamemaster/Player section below for
 `rebuildEligible()` and why deletion is gone.
 
-`lockUnmatched` is a real setting again (**Card Setup → "Only allow marking squares that have been
-called"**, default on) rather than the hard-coded `false` it was while the control was hidden.
+**It is not a setting.** It was briefly offered as one and that was wrong: a switch to turn the
+gate off is a switch to turn the guarantee off, and the guarantee is the point — a completed line
+is one the calls actually justify rather than one somebody clicked. `isEligible()` reads
+`card.eligible` unconditionally; there is no flag left.
+
+The two settings that remain nearby are deliberately the player's own: **Highlight matching
+squares** and **Enlarge squares on hover** both change how you read your card on your own screen,
+not what is on it or what counts as marked. Calling a table without the glow is a legitimate way to
+play, and a harder one.
 
 There is no auto-draw. Draws are one at a time, because a person is reading them out.
 

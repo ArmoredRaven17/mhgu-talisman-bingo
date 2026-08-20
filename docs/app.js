@@ -273,28 +273,29 @@
   let view = null;          // the card's pruned roll table; rebuilt on load, never serialised
   let bags = null;          // leftover goals per pool, for per-square reroll
   let usedKeys = new Set();
-  // Hidden for now. Read as a hard-coded literal rather than from settings, for the same
-  // reason lockUnmatched is: anyone who ticked the box while the control was live has
-  // showReroll:true in localStorage, and honouring that with no control on the page would put
-  // a button on their squares they could never turn off. The key is no longer written, so it
-  // clears itself on the next settings save.
+  // Hidden for now, and read as a hard-coded literal rather than from settings: anyone who
+  // ticked the box while the control was live has showReroll:true in localStorage, and
+  // honouring that with no control on the page would put a button on their squares they could
+  // never turn off. The key is no longer written, so it clears itself on the next settings save.
   let showReroll = false;
   let softHighlight = true;
   // HIDDEN, and forced off. The mechanism below works and is left intact, but the control is
-  // Marking is gated on the draw history: a square only becomes claimable once some talisman
-  // has actually satisfied it. Unlike MHGU Bingo, whose squares are hunt objectives only the
-  // player can adjudicate, every square here is a condition on a talisman and the app produced
-  // the talisman -- so the draw history is an authoritative caller's board.
+  // Marking is gated on the draw history, always, and is NOT a setting. A square only becomes
+  // claimable once some talisman has actually satisfied it. That is what makes a BINGO mean
+  // something: the draw history is an authoritative record, so a completed line is one the
+  // calls actually justify rather than one somebody clicked. A switch to turn it off would be
+  // a switch to turn the guarantee off, which is worth nothing to the player who leaves it on.
   //
-  // This was switched off for a long time, and the objection has now expired. It was that one
-  // person calls while everyone else only watches, so the other devices never draw, their
-  // `eligible` stays empty and every square locks forever. Followers now receive the draws
-  // themselves -- polling syncs them, and Sync to Current Draw catches up by hand -- so the
-  // set fills on every screen, not just the caller's.
+  // It works here in a way it could not in MHGU Bingo, whose squares are hunt objectives only
+  // the player can adjudicate. Every square here is a condition on a talisman and the app
+  // produced the talisman.
   //
-  // Log Check is the other half: a locked board is only fair if you can see what the calls
-  // have already covered without hunting through 50 log entries.
-  let lockUnmatched = true;
+  // It was switched off for a long time because one person calls while everyone else only
+  // watches -- those devices never drew, so their `eligible` stayed empty and every square
+  // locked forever. Followers now receive the draws themselves, so the set fills on every
+  // screen. Log Check is the other half: a locked board is only fair if you can see what the
+  // calls have already covered.
+
   // "gm" rolls talismans here; "player" types in what someone else called. Persisted, because
   // which one you are is a property of your seat at the table, not of the card.
   // Derived from the session by currentRole(); never set by the user.
@@ -515,7 +516,7 @@
   }
 
   const isEligible = (i) =>
-    !lockUnmatched || (!!card && (card.eligible || []).indexOf(i) > -1);
+    !!card && (card.eligible || []).indexOf(i) > -1;
 
   function toggleMark(i) {
     if (!card || i === card.freeIdx) return;
@@ -1411,27 +1412,10 @@
       if (num) num.disabled = locked || !(cb && cb.checked);
     }
 
-    // The glow and the marking gate are NOT in the seed -- nothing carries them between seats.
-    // Freezing them as-is would pin every player at whatever they happened to have locally,
-    // which is not the Gamemaster dictating anything, it is each player keeping a different
-    // rule. So a session forces both ON and then locks them: one known state for the table.
-    //
-    // If these should be the Gamemaster's CHOICE rather than a fixed rule, they have to ride
-    // in the session string like size and the pools do.
-    if (locked) {
-      if (!softHighlight || !lockUnmatched) {
-        softHighlight = true;
-        lockUnmatched = true;
-        saveSettings();
-        if (card) renderCard();
-      }
-      $("softHighlight").checked = true;
-      $("lockUnmatched").checked = true;
-    }
-    $("softHighlight").disabled = locked;
-    $("lockUnmatched").disabled = locked;
-    // Enlarge on hover stays editable: it is how a player reads their own card on their own
-    // screen, and changes nothing about what is on it.
+    // Highlighting and enlarge-on-hover stay the player's own: both change how you read your
+    // card on your own screen, not what is on it or what counts as marked. Calling a table
+    // without the glow is a legitimate way to play, and a harder one -- that is the player's
+    // call to make, not the session's.
     $("sessionLock").classList.toggle("hidden", !locked);
   }
 
@@ -1667,7 +1651,7 @@
   // ── Persistence ────────────────────────────────────────────────────────────
   function saveSettings() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, softHighlight: softHighlight, lockUnmatched: lockUnmatched, previewMin: previewMin }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ v: 1, cfg: cfg, softHighlight: softHighlight, previewMin: previewMin }));
     } catch (e) {}
   }
   function saveCard() {
@@ -1684,8 +1668,6 @@
     $("showReroll").checked = showReroll;
     softHighlight = d.softHighlight !== false;
     $("softHighlight").checked = softHighlight;
-    lockUnmatched = d.lockUnmatched !== false;
-    $("lockUnmatched").checked = lockUnmatched;
     if (Number.isInteger(d.previewMin)) previewMin = d.previewMin;
     $("previewMin").value = String(previewMin);
     if (d.cfg && typeof d.cfg === "object") {
@@ -1746,10 +1728,8 @@
   function doReset() {
     cfg = JSON.parse(JSON.stringify(DEFAULT_CFG));
     softHighlight = true;
-    lockUnmatched = true;
     previewMin = 5;
     $("softHighlight").checked = true;
-    $("lockUnmatched").checked = true;
     $("previewMin").value = "5";
     $("gridSize").value = String(cfg.size);
     $("freeSpace").checked = cfg.free;
@@ -1834,9 +1814,6 @@
     });
     $("showReroll").addEventListener("change", () => {
       showReroll = $("showReroll").checked; saveSettings(); if (card) renderCard();
-    });
-    $("lockUnmatched").addEventListener("change", () => {
-      lockUnmatched = $("lockUnmatched").checked; saveSettings(); if (card) renderCard();
     });
     $("softHighlight").addEventListener("change", () => {
       softHighlight = $("softHighlight").checked; saveSettings(); if (card) renderCard();
