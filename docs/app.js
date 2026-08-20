@@ -520,8 +520,10 @@
   const isComplete = () => !!card && card.marked.size >= totalCells() && totalCells() > 0;
 
   function doDraw() {
-    // Last line: a follower never advances their own counter, whatever UI they reached.
-    if (live && !live.mine) return false;
+    // Last line: inside a session, nothing advances this card except the server's number.
+    // The Gamemaster's Draw button posts first and syncs to what comes back; it never lands
+    // here while a session is running.
+    if (live) return false;
     if (!drawOnce()) return false;
     renderCard();
     saveCard();
@@ -1265,10 +1267,12 @@
 
   function renderLive() {
     const following = !!live && !liveLost && !live.mine;
-    // A follower must not be able to advance their own counter: that is both a desync and a
-    // spoiler, since they could run ahead of what has actually been called.
-    $("peNext").classList.toggle("hidden", following);
-    $("peManualHint").classList.toggle("hidden", following);
+    // Hidden in ANY session, host included. A follower pressing it would run ahead of what
+    // was called; a HOST pressing it advances their card without posting, so they drift ahead
+    // of the session they are running. The Gamemaster draws from the Gamemaster tab, which is
+    // the only path that goes through the server.
+    $("peNext").classList.toggle("hidden", !!live);
+    $("peManualHint").classList.toggle("hidden", !!live);
     // Manual entry lives in the sidebar so six dropdowns don't squeeze the board. It is for
     // players only, and pointless while a session is feeding draws in automatically.
     // Available in a live session too, but as a CHECKER there — see addTypedCharm. Hidden
@@ -1295,7 +1299,17 @@
       ? "The Gamemaster draws for this session — your card follows along"
       : "";
 
-    const checking = !!live && !live.mine;
+    // And the mirror image: hosting means you are the caller, not a player. The Player tab
+    // only offers drawing and manual entry, both of which are the Gamemaster's job from the
+    // other tab, so leaving it open just invites the desync it took three guards to close.
+    const isHost = !!live && live.mine;
+    const plTab = $("tabPlayer");
+    plTab.disabled = isHost;
+    plTab.classList.toggle("locked", isHost);
+    plTab.title = isHost ? "You are running this session — draw from the Gamemaster tab" : "";
+    if (isHost && mode !== "gm") setMode("gm");
+
+    const checking = !!live;
     $("peAdd").textContent = checking ? "Check Talisman" : "Add Talisman";
     $("peManualNote") && ($("peManualNote").textContent = checking
       ? "In a session this only checks a talisman against your card — the Gamemaster's draws are what count."
@@ -1509,7 +1523,7 @@
     // a follower whose count runs past the session's stops receiving real draws entirely --
     // syncTo only ever moves forward. So here it just lights what the talisman would match,
     // leaving the count, the log and the session position untouched.
-    if (live && !live.mine) {
+    if (live) {
       const hits = [];
       for (let i = 0; i < card.cells.length; i++) {
         const cell = card.cells[i];
@@ -1538,6 +1552,7 @@
     // Following a session pins you to Player. Belt and braces with the disabled tab above:
     // this is the only funnel into gm mode, including the persisted setting on boot.
     if (next === "gm" && live && !live.mine) next = "player";
+    if (next === "player" && live && live.mine) next = "gm";
     mode = next === "player" ? "player" : "gm";
     $("tabGm").setAttribute("aria-selected", mode === "gm" ? "true" : "false");
     $("tabPlayer").setAttribute("aria-selected", mode === "player" ? "true" : "false");
