@@ -4,14 +4,9 @@
     {
       "name": "mhgu-talisman-bingo",
       "runtimeExecutable": "python",
-      "runtimeArgs": [
-        "-m",
-        "http.server",
-        "5582",
-        "--directory",
-        "docs"
-      ],
-      "port": 5582
+      "runtimeArgs": ["tools/serve.py"],
+      "port": 5582,
+      "autoPort": true
     }
   ]
 }
