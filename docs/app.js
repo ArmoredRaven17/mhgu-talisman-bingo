@@ -1476,10 +1476,16 @@
   //
   // The old session is ended rather than abandoned, so anyone still on it is told it is over
   // instead of quietly following a game that has stopped advancing.
-  async function restartSessionWithSettings() {
-    generate(newToken(), newPlayer());
-    await endLive();
-    await goLive();
+  async function restartSession() {
+    const btn = $("newLiveBtn");
+    btn.disabled = true;
+    try {
+      generate(newToken(), newPlayer());
+      await endLive();
+      await goLive();
+    } finally {
+      btn.disabled = false;
+    }
     renderTwitch();
     renderLive();
   }
@@ -1515,7 +1521,7 @@
         + "starts a new session. You'll get a new seed to hand out, and anyone on the old one "
         + "has to join again.",
       "Restart",
-      restartSessionWithSettings,
+      restartSession,
       revertToSession);
   }
 
@@ -1899,6 +1905,18 @@
     $("twitchLogout").addEventListener("click", signOut);
     $("startLiveBtn").addEventListener("click", async () => { await goLive(); renderTwitch(); });
     $("stopLiveBtn").addEventListener("click", async () => { await endLive(); renderTwitch(); });
+    // A fresh game on the same screen: new card, new seed, new session. Ending and restarting
+    // by hand was three steps (End, New card, Start) and left a window where the session was
+    // down. Confirmed, because everyone currently following has to join the new seed.
+    $("newLiveBtn").addEventListener("click", () => {
+      if (!live || !live.mine) return;
+      confirmAlways(
+        "Start a new session?",
+        "This ends the current session and starts a fresh one with a new card and a new seed. "
+          + "Anyone following the old session has to join again with the new one.",
+        "New session",
+        restartSession);
+    });
     $("copyLiveSession").addEventListener("click", () => {
       const b = $("copyLiveSession");
       const done = () => { b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy session"; }, 1200); };
