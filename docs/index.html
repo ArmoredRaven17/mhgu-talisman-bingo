@@ -219,7 +219,16 @@
     <div id="liveIdle">
       <p class="hint" id="liveIdleHint">Start a session and every viewer who joins gets their own
          card that follows your draws.</p>
-      <div class="row gap"><button id="startLiveBtn" class="btn accent">Start a live session</button></div>
+      <p class="hint">Start uses the card you have now. <strong>New session</strong> rolls a fresh
+         card and starts on that seed instead — use it if this one is already claimed.</p>
+      <label class="field">
+        <span class="hint">Session you'll start on</span>
+        <input id="liveIdleSession" type="text" readonly spellcheck="false">
+      </label>
+      <div class="row gap">
+        <button id="startLiveBtn" class="btn accent">Start a live session</button>
+        <button id="newLiveBtn" class="btn">New session</button>
+      </div>
       <p id="liveStartStatus" class="hint"></p>
     </div>
 
@@ -235,7 +244,6 @@
       </label>
       <div class="row gap">
         <button id="copyLiveSession" class="btn tiny">Copy session</button>
-        <button id="newLiveBtn" class="btn tiny">New session</button>
         <button id="stopLiveBtn" class="btn tiny">End session</button>
       </div>
     </div>
@@ -333,6 +341,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=91"></script>
+<script src="app.js?v=92"></script>
 </body>
 </html>

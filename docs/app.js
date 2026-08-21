@@ -1264,6 +1264,10 @@
     const hosting = !!live && live.mine;
     $("liveIdle").classList.toggle("hidden", hosting);
     $("liveRunning").classList.toggle("hidden", !hosting);
+    // Which session Start is about to claim. Without it, "New session" changes something you
+    // cannot see -- the full seed is in the bar behind the modal, but the session half is the
+    // part that matters here and the bar shows the player token too.
+    if (!hosting && card) $("liveIdleSession").value = card.session || "";
     if (hosting) {
       $("liveSessionOut").value = live.session;
       // The draw count makes it visibly alive rather than merely claiming to be. A static
@@ -1477,15 +1481,9 @@
   // The old session is ended rather than abandoned, so anyone still on it is told it is over
   // instead of quietly following a game that has stopped advancing.
   async function restartSession() {
-    const btn = $("newLiveBtn");
-    btn.disabled = true;
-    try {
-      generate(newToken(), newPlayer());
-      await endLive();
-      await goLive();
-    } finally {
-      btn.disabled = false;
-    }
+    generate(newToken(), newPlayer());
+    await endLive();
+    await goLive();
     renderTwitch();
     renderLive();
   }
@@ -1905,17 +1903,19 @@
     $("twitchLogout").addEventListener("click", signOut);
     $("startLiveBtn").addEventListener("click", async () => { await goLive(); renderTwitch(); });
     $("stopLiveBtn").addEventListener("click", async () => { await endLive(); renderTwitch(); });
-    // A fresh game on the same screen: new card, new seed, new session. Ending and restarting
-    // by hand was three steps (End, New card, Start) and left a window where the session was
-    // down. Confirmed, because everyone currently following has to join the new seed.
+    // Roll a different session to start ON, BEFORE going live. Start claims the seed of the
+    // card you are holding, so a seed someone else already claimed dead-ends inside the modal:
+    // the error tells you to make a new card, which used to mean closing the modal to do it.
+    //
+    // It does not go live by itself. Changing which session you are about to start and
+    // actually starting it are two decisions, and the second one is the outward-facing one.
     $("newLiveBtn").addEventListener("click", () => {
-      if (!live || !live.mine) return;
-      confirmAlways(
-        "Start a new session?",
-        "This ends the current session and starts a fresh one with a new card and a new seed. "
-          + "Anyone following the old session has to join again with the new one.",
-        "New session",
-        restartSession);
+      if (live) return;
+      guard("New card and session?", "New session", () => {
+        generate(newToken(), newPlayer());
+        renderTwitch();
+        liveNote("liveStartStatus", "New session ready — press Start to go live on it.");
+      });
     });
     $("copyLiveSession").addEventListener("click", () => {
       const b = $("copyLiveSession");
