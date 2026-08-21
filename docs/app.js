@@ -1108,11 +1108,23 @@
   // Only asked when there is something to lose. An unmarked card costs nothing to
   // regenerate — and its seed is sitting in the title bar anyway — so confirming that
   // would be pure friction. Marks are the part that can't be recovered.
-  let confirmFn = null;
+  let confirmFn = null, cancelFn = null;
   function markedCount() {
     if (!card) return 0;
     return card.marked.size - (card.freeIdx >= 0 && card.marked.has(card.freeIdx) ? 1 : 0);
   }
+  // Always asks, unlike guard(), which only interrupts when there is marked progress to lose.
+  // Restarting a session is outward-facing -- it strands everyone currently following it --
+  // so it is confirmed even when this card is untouched.
+  function confirmAlways(title, body, okLabel, fn, onCancel) {
+    $("confirmTitle").textContent = title;
+    $("confirmBody").textContent = body;
+    $("confirmOk").textContent = okLabel;
+    confirmFn = fn;
+    cancelFn = onCancel || null;
+    $("confirmModal").classList.remove("hidden");
+  }
+
   function guard(title, okLabel, fn) {
     const n = markedCount();
     if (!n) return fn();
@@ -1126,6 +1138,7 @@
   function closeConfirm() {
     $("confirmModal").classList.add("hidden");
     confirmFn = null;
+    cancelFn = null;
   }
 
 
@@ -1154,12 +1167,12 @@
       cb.addEventListener("change", () => {
         cfg.cats[c.id] = cb.checked ? Math.max(1, parseInt(num.value, 10) || 1) : 0;
         num.disabled = !cb.checked;
-        saveSettings(); refreshCounts();
+        seedSettingChanged();
       });
       num.addEventListener("change", () => {
         num.value = Math.min(9, Math.max(1, parseInt(num.value, 10) || 1));
         if (cb.checked) cfg.cats[c.id] = parseInt(num.value, 10);
-        saveSettings(); refreshCounts();
+        seedSettingChanged();
       });
 
       l.appendChild(cb);
@@ -1374,7 +1387,10 @@
   // The personal settings below them (highlighting, the marking gate, hover preview) are not
   // in the seed and stay editable: they change how you read your own card, not what is on it.
   function syncSessionLock() {
-    const locked = !!live;
+    // Followers only. The Gamemaster OWNS these -- changing one restarts the session with the
+    // new settings, which is the only way to change them at all, since they are the session
+    // string. Locking the host out of them would mean nobody could ever change the size.
+    const locked = !!live && !live.mine;
     $("gridSize").disabled = locked;
     $("freeSpace").disabled = locked;
     for (const row of $("catList").querySelectorAll(".cat-row")) {
@@ -1389,6 +1405,9 @@
     // without the glow is a legitimate way to play, and a harder one -- that is the player's
     // call to make, not the session's.
     $("sessionLock").classList.toggle("hidden", !locked);
+    // The host gets the other half of the story: theirs are editable, and changing one is a
+    // new session rather than a tweak to this one.
+    $("sessionOwner").classList.toggle("hidden", !(live && live.mine));
   }
 
   function renderLive() {
@@ -1450,6 +1469,56 @@
   //
   // Better than disabling New Card mid-session: a viewer who dislikes their board can take a
   // fresh one and keep playing, instead of choosing between a bad card and leaving.
+  // A seed-body setting changed while hosting. Size, the free-space flag and the pool weights
+  // ARE the session string, so there is no way to change one and stay in the same game --
+  // the new settings necessarily describe a different session. Mint a card for them, drop the
+  // old session and claim the new one.
+  //
+  // The old session is ended rather than abandoned, so anyone still on it is told it is over
+  // instead of quietly following a game that has stopped advancing.
+  async function restartSessionWithSettings() {
+    generate(newToken(), newPlayer());
+    await endLive();
+    await goLive();
+    renderTwitch();
+    renderLive();
+  }
+
+  // Whether the current settings still describe the session we are hosting.
+  function settingsMatchSession() {
+    if (!live) return true;
+    const d = decodeSeed(live.session);
+    return !!d.cfg && seedBody(cfg, d.token) === live.session;
+  }
+
+  // Put a seed-body control back to what the running session says, for a cancelled restart.
+  function revertToSession() {
+    const d = decodeSeed(live.session);
+    if (!d.cfg) return;
+    cfg = d.cfg;
+    $("gridSize").value = String(cfg.size);
+    buildCatRows();
+    syncFreeSpace();
+    saveSettings();
+    refreshCounts();
+  }
+
+  // Shared by grid size, free space and every pool weight: the three things that live in the
+  // seed body. Outside a session they just change the next card, as they always did.
+  function seedSettingChanged() {
+    saveSettings();
+    refreshCounts();
+    if (!live || !live.mine || settingsMatchSession()) return;
+    confirmAlways(
+      "Restart the session?",
+      "Grid size, free space and the pools are part of the session itself, so changing one "
+        + "starts a new session. You'll get a new seed to hand out, and anyone on the old one "
+        + "has to join again.",
+      "Restart",
+      restartSessionWithSettings,
+      revertToSession);
+  }
+
   function newCardInSession() {
     const d = decodeSeed(live.session);
     // Rebuild cfg from the session, or a locally changed pool weight would alter the seed
@@ -1781,10 +1850,10 @@
 
     $("gridSize").addEventListener("change", () => {
       cfg.size = parseInt($("gridSize").value, 10);
-      syncFreeSpace(); saveSettings(); refreshCounts();
+      syncFreeSpace(); seedSettingChanged();
     });
     $("freeSpace").addEventListener("change", () => {
-      cfg.free = $("freeSpace").checked; saveSettings(); refreshCounts();
+      cfg.free = $("freeSpace").checked; seedSettingChanged();
     });
     $("showReroll").addEventListener("change", () => {
       showReroll = $("showReroll").checked; saveSettings(); if (card) renderCard();
@@ -1904,8 +1973,12 @@
     copyTo("seedCopy", "Copy card", () => $("seedInput").value);
     copyTo("sessionCopy", "Copy session", () => (card && card.session) || $("seedInput").value);
 
-    $("confirmOk").addEventListener("click", () => { const f = confirmFn; closeConfirm(); if (f) f(); });
-    $("confirmCancel").addEventListener("click", closeConfirm);
+    $("confirmOk").addEventListener("click", () => {
+      const f = confirmFn; cancelFn = null; closeConfirm(); if (f) f();
+    });
+    $("confirmCancel").addEventListener("click", () => {
+      const c = cancelFn; closeConfirm(); if (c) c();
+    });
     wireModal("helpModal", "helpBtn", "helpClose");
     wireModal("linksModal", "linksBtn", "linksClose");
     wireModal("themeModal", "themeBtn", "themeClose");

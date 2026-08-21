@@ -8,7 +8,7 @@
 <meta name="description" content="A bingo card of talisman conditions — keep drawing charms until one fills the line you needed.">
 <link rel="icon" type="image/png" href="assets/TalismanIcons/icon_talisman_r10.png">
 <!-- Bump ?v= on any styles/app/data change so browsers fetch fresh copies (no hard-refresh needed) -->
-<link rel="stylesheet" href="styles.css?v=57">
+<link rel="stylesheet" href="styles.css?v=58">
 </head>
 <body>
 <div id="app">
@@ -59,6 +59,8 @@
           <p id="sessionLock" class="hint hidden">In a session the Gamemaster sets the card:
              grid size, free space and the pools come from the session, and marking stays gated
              on the draws. Highlighting and enlarge-on-hover are still yours.</p>
+          <p id="sessionOwner" class="hint hidden">These three are the session itself, so changing
+             one starts a new session with a new seed to hand out.</p>
           <label class="field">Grid size
             <select id="gridSize">
               <option value="3">3 &times; 3</option>
