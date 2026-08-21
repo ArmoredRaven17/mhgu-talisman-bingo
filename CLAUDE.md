@@ -65,9 +65,15 @@ entry. `drawAt(12)` is just `drawAt(12)`.
 **The Gamemaster's settings are the session's.** Grid size, the free-space flag and the pool
 weights are literally in the seed body — `MHGU-{size}{F|N}-{pools}-{token}` — so they always were
 the caller's: `applySeed` adopts them on join, and `newCardInSession` rebuilds them from the session
-before every new card, precisely so a local change cannot fork the seed. What was missing is that
-the controls still *looked* editable; `syncSessionLock()` disables them while `live` is set, host
-included, since the session string is minted when the session starts.
+before every new card, precisely so a local change cannot fork the seed.
+
+`syncSessionLock()` disables the three for **followers only**. It briefly locked the host too, which
+meant nobody could change the grid size at all once a session was running. The Gamemaster owns them:
+changing one while hosting **restarts the session** — there is no way to change a seed-body setting
+and stay in the same game, because those settings *are* the session string. It is confirmed first,
+since it strands anyone following the old session, and cancelling puts the control back to what the
+session says. The old session is `endLive()`d rather than abandoned, so viewers are told it is over
+instead of quietly following a game that has stopped advancing.
 
 Nothing else is locked. Highlighting and hover-enlarge are not in the seed, so freezing them would
 pin each player at whatever they happened to have locally — that is not the Gamemaster dictating
