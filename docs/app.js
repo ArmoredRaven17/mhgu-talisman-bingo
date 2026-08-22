@@ -1280,8 +1280,15 @@
     $("cmdUrl").textContent = url + (who || "YOUR_CHANNEL");
 
     const hosting = !!live && live.mine;
+    const following = !!live && !live.mine;
     $("liveIdle").classList.toggle("hidden", hosting);
     $("liveRunning").classList.toggle("hidden", !hosting);
+    // Three states, not two. "Not hosting" used to mean "offer to start a session", which is
+    // wrong for a follower: their card carries the host's seed, so Start returns
+    // already_claimed, and the join status was written into a node only the host could see.
+    $("liveFollowing").classList.toggle("hidden", !following);
+    $("liveStart").classList.toggle("hidden", following);
+    if (following) $("liveFollowSession").value = live.session || "";
     // Which session Start is about to claim. Without it, "New session" changes something you
     // cannot see -- the full seed is in the bar behind the modal, but the session half is the
     // part that matters here and the bar shows the player token too.
@@ -1593,6 +1600,22 @@
     } finally {
       btn.disabled = false;
     }
+  }
+
+  // Stop following someone else's session. endLive() is the HOST's counterpart and refuses to
+  // run for a follower (`!live.mine`), which left a follower with no way out at all short of
+  // clearing storage. Local only -- there is nothing on the server recording that you joined.
+  //
+  // The card and its marks are kept: the seed still describes the same board, so re-joining
+  // puts you back exactly where you were.
+  function leaveSession() {
+    if (!live || live.mine) return;
+    live = null;
+    liveLost = false;
+    stopPolling();
+    rememberLive();
+    renderTwitch();
+    renderLive();
   }
 
   async function endLive() {
@@ -1921,18 +1944,29 @@
     $("twitchLogout").addEventListener("click", signOut);
     $("startLiveBtn").addEventListener("click", async () => { await goLive(); renderTwitch(); });
     $("stopLiveBtn").addEventListener("click", async () => { await endLive(); renderTwitch(); });
+    $("leaveLiveBtn").addEventListener("click", leaveSession);
     // Roll a different session to start ON, BEFORE going live. Start claims the seed of the
     // card you are holding, so a seed someone else already claimed dead-ends inside the modal:
     // the error tells you to make a new card, which used to mean closing the modal to do it.
     //
     // It does not go live by itself. Changing which session you are about to start and
     // actually starting it are two decisions, and the second one is the outward-facing one.
+    //
+    // It ALWAYS rolls. It used to open with `if (live) return`, which looks defensive and is
+    // not: this button lives in the idle panel, and the idle panel shows whenever you are not
+    // HOSTING -- which includes following someone else's session, and a session that has ended
+    // or dropped while `live` still points at it. In every one of those the button rendered and
+    // silently did nothing.
     $("newLiveBtn").addEventListener("click", () => {
-      if (live) return;
       guard("New card and session?", "New session", () => {
+        // A new seed is a different game, so it cannot also be someone else's session. Leave
+        // first, or polling keeps syncing draws onto a card that is no longer in that session.
+        leaveSession();
         generate(newToken(), newPlayer());
         renderTwitch();
+        renderLive();
         liveNote("liveStartStatus", "New session ready — press Start to go live on it.");
+        liveNote("joinStatus", "");
       });
     });
     $("copyLiveSession").addEventListener("click", () => {

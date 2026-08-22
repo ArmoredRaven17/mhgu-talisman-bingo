@@ -217,17 +217,36 @@
 
     <h3>Your live session</h3>
     <div id="liveIdle">
-      <p class="hint" id="liveIdleHint">Start a session and every viewer who joins gets their own
-         card that follows your draws.</p>
-      <p class="hint">Start uses the card you have now. <strong>New session</strong> rolls a fresh
-         card and starts on that seed instead — use it if this one is already claimed.</p>
-      <label class="field">
-        <span class="hint">Session you'll start on</span>
-        <input id="liveIdleSession" type="text" readonly spellcheck="false">
-      </label>
-      <div class="row gap">
-        <button id="startLiveBtn" class="btn accent">Start a live session</button>
-        <button id="newLiveBtn" class="btn">New session</button>
+      <!-- Following someone else's session. This state had no panel at all: a follower got the
+           "start a session" controls, which cannot work for them -- their card carries the
+           host's seed, so Start comes back already_claimed -- and no way to leave. -->
+      <div id="liveFollowing" class="hidden">
+        <p class="live-banner"><span class="live-dot"></span><strong>FOLLOWING</strong></p>
+        <label class="field">
+          <span class="hint">Session</span>
+          <input id="liveFollowSession" type="text" readonly spellcheck="false">
+        </label>
+        <p id="joinStatus" class="hint"></p>
+        <div class="row gap">
+          <button id="leaveLiveBtn" class="btn">Leave session</button>
+        </div>
+        <p class="hint">Leaving keeps this card and your marks — you can join again with
+           the same session.</p>
+      </div>
+
+      <div id="liveStart">
+        <p class="hint" id="liveIdleHint">Start a session and every viewer who joins gets their own
+           card that follows your draws.</p>
+        <p class="hint">Start uses the card you have now. <strong>New session</strong> rolls a fresh
+           card and starts on that seed instead — use it if this one is already claimed.</p>
+        <label class="field">
+          <span class="hint">Session you'll start on</span>
+          <input id="liveIdleSession" type="text" readonly spellcheck="false">
+        </label>
+        <div class="row gap">
+          <button id="startLiveBtn" class="btn accent">Start a live session</button>
+          <button id="newLiveBtn" class="btn">New session</button>
+        </div>
       </div>
       <p id="liveStartStatus" class="hint"></p>
     </div>
@@ -237,7 +256,6 @@
          &mdash; <span id="liveDrawCount">draw 0</span></p>
       <p class="hint">Viewers who join follow your draws. Keep drawing with
          <strong>Draw Talisman</strong> in the sidebar.</p>
-      <p id="joinStatus" class="hint"></p>
       <label class="field">
         <span class="hint">Session</span>
         <input id="liveSessionOut" type="text" readonly spellcheck="false">
@@ -341,6 +359,6 @@
 <script src="data.js?v=4"></script>
 <script src="roll.js?v=4"></script>
 <script src="goals.js?v=2"></script>
-<script src="app.js?v=96"></script>
+<script src="app.js?v=97"></script>
 </body>
 </html>
