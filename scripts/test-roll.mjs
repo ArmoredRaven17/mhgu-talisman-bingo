@@ -10,7 +10,7 @@
 // come off the same pruned table the card would use. A closed form that were only right on
 // the full tables would sail through the old test and be wrong in every real game.
 import { DATA, ROLL, GOALS, DEFAULT_TIER_W, SOFT_FLOOR, HARD_FLOOR, FLOORS,
-         KEEP_N, tierPairs, satisfies, keepFor, pools } from "./common.mjs";
+         KEEP_N, tierPairs, satisfies, keepFor, pools, makeRng } from "./common.mjs";
 
 let fail = 0;
 const check = (ok, msg) => { if (!ok) { fail++; console.error("FAIL:", msg); } };
@@ -105,6 +105,53 @@ for (const seed of SEEDS) {
   const n = (c) => P.soft[c].length + "/" + P.hard[c].length;
   console.log(`  ${seed}: ${all.length} goals  ` +
     `name ${n("name")}  pts ${n("pts")}  slot ${n("slot")}  rar ${n("rar")}  combo ${n("combo")}`);
+}
+
+// ── Every combo tile must be a pair some enabled tier can actually roll ───────
+// The closed form already handles this: pBoth() reads legalTrees(tier, 1) and
+// legalTrees(tier, 2) per tier and skips any ordering where a tree is not legal in that slot,
+// so an impossible pair scores 0 and the hard floor drops it. This asserts the OUTCOME
+// independently, straight off the tables, because the failure is silent and permanent: an
+// impossible tile is a square that can never be marked, on a card that still needs it to win.
+//
+// It matters because 45 trees are second-skill-only and 4 are first-skill-only, so plenty of
+// pairs are impossible -- and because mystery has no legal slot-2 row at all, no combo tile is
+// ever reachable on every enabled tier.
+{
+  const reachable = (tier, x, y) => {
+    const L1 = ROLL.legalTrees(tier, 1), L2 = ROLL.legalTrees(tier, 2);
+    if (!L1.length || !L2.length) return false;
+    const ok = (list, id) => {
+      const e = list.find((r) => r[0] === id);
+      return !!e && e[1][1] >= 1;          // some value in [lo, hi] reaches +1
+    };
+    return (ok(L1, x) && ok(L2, y)) || (ok(L1, y) && ok(L2, x));
+  };
+  const enabled = ROLL.TIER_ORDER.filter((t) => (DEFAULT_TIER_W[t] | 0) > 0);
+  let combos = 0, bad = 0, worstK = null;
+  for (let i = 0; i < 200; i++) {
+    const keep = keepFor(makeRng("combo-reach:" + i), KEEP_N);
+    const cat = GOALS.build(keep, DEFAULT_TIER_W, FLOORS);
+    for (const b of ["soft", "hard"]) {
+      for (const g of cat[b].combo) {
+        combos++;
+        if (!enabled.some((t) => reachable(t, g.a, g.a2))) { bad++; worstK = worstK || g.k; }
+      }
+    }
+  }
+  console.log(`combo tiles reachable: ${combos.toLocaleString()} checked, ${bad} impossible`);
+  check(bad === 0, `${bad} combo tiles no enabled tier can roll, e.g. ${worstK}`);
+
+  // Mystery cannot carry a second skill at all, so a mystery-only mix must offer NO pairs
+  // rather than a pool of squares nobody can ever mark.
+  const mysteryOnly = { mystery: 100, shining: 0, timeworn: 0, enduring: 0 };
+  let mCombo = 0;
+  for (let i = 0; i < 40; i++) {
+    const keep = keepFor(makeRng("mystery-only:" + i), KEEP_N);
+    const cat = GOALS.build(keep, mysteryOnly, FLOORS);
+    mCombo += cat.soft.combo.length + cat.hard.combo.length;
+  }
+  check(mCombo === 0, `mystery-only emitted ${mCombo} combo tiles; mystery has no slot-2 rows`);
 }
 
 const meanZ = sumZ / totalChecked;

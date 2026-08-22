@@ -178,7 +178,12 @@ given an ordinary square from handing over a rare one; it was never meant to vet
   margin is why the number is not lower.
 - **Mystery is a hard ceiling on every pair tile.** It has *zero* legal slot-2 rows, so a mystery
   charm is always single-skilled and 30% of the draw stream can never satisfy a two-skill tile at
-  all. No amount of pruning lifts this.
+  all. No amount of pruning lifts this. A mystery-only weighting therefore emits **no combo tiles**
+  rather than a pool of squares nobody can mark — `test-roll.mjs` asserts both that and the general
+  case, that every emitted pair is one some enabled tier can actually roll. `pBoth()` already
+  guarantees it by reading `legalTrees(tier, slot)` per tier, so a pair that no tier can split
+  across its two slots scores 0 and the hard floor drops it; the test pins the outcome, since an
+  impossible tile is a silent, permanent hole in a card that still needs it to win.
 - **Rarity is exactly the ten named talismans.** No open bands: "rarity 5 or higher" was 1 in 2,
   which the `CEILING` now catches on principle. Bands survive only as combo second conditions.
 - **Talisman rarity and charm kind are two different axes.** The vendored table has four keys — the
