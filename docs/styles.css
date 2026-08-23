@@ -402,7 +402,7 @@ a.icon-btn{display:inline-flex;align-items:center;text-decoration:none}
 .modal-card h3{margin:16px 0 6px;font-size:14px}
 .modal-card p{margin:0 0 10px;line-height:1.45}
 .modal-card a{color:var(--accent-hover)}
-.modal-card .muted{color:var(--text-dim);font-size:13px;opacity:.86}
+.modal-card .muted{color:var(--text-dim);font-size:13px;opacity:.75}
 .modal-card ul{margin:0 0 10px;padding-left:18px}
 .modal-card li{margin-bottom:5px;line-height:1.4}
 .modal-card code{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-family:ui-monospace,Consolas,monospace;font-size:12px;user-select:text;-webkit-user-select:text}
